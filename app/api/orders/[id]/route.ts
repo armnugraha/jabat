@@ -1,13 +1,13 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (isSupabaseConfigured()) {
       try {
@@ -42,11 +42,11 @@ export async function GET(
 }
 
 export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const body = await request.json();
     const { status, prescriptionStatus, paymentStatus } = body;
 

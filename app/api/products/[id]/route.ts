@@ -10,10 +10,10 @@ function isValidUUID(str: string): boolean {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const idOrSlug = params.id;
+    const { id } = await params;
 
     if (isSupabaseConfigured()) {
       const supabase = await getSupabaseAdminClient(request);
@@ -25,10 +25,10 @@ export async function GET(
           variants:product_variants(*)
         `);
 
-      if (isValidUUID(idOrSlug)) {
-        queryBuilder = queryBuilder.eq('id', idOrSlug);
+      if (isValidUUID(id)) {
+        queryBuilder = queryBuilder.eq('id', id);
       } else {
-        queryBuilder = queryBuilder.eq('slug', idOrSlug);
+        queryBuilder = queryBuilder.eq('slug', id);
       }
 
       const { data, error } = await queryBuilder.maybeSingle();
@@ -44,7 +44,7 @@ export async function GET(
 
     // Local fallback
     const product = mockProducts.find(
-      (p) => p.id === idOrSlug || p.slug === idOrSlug
+      (p) => p.id === id || p.slug === id
     );
 
     if (!product) {
@@ -69,10 +69,10 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await params;
     const body = await request.json();
     const {
       name,
@@ -193,10 +193,10 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await params;
 
     if (isSupabaseConfigured() && isValidUUID(id)) {
       const supabase = await getSupabaseAdminClient();
