@@ -168,11 +168,11 @@ export default function ProductDetailPage() {
           <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleFavoriteClick}
-              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition border border-slate-200 bg-white"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-rose-600 transition border border-slate-200/80 bg-white shadow-2xs"
               aria-label="Favorit"
             >
               <Heart
-                className={`w-4.5 h-4.5 transition ${
+                className={`w-4 h-4 transition ${
                   isFavorite ? 'fill-rose-500 text-rose-500 scale-110' : ''
                 }`}
               />
@@ -186,19 +186,20 @@ export default function ProductDetailPage() {
                   }).catch(() => {});
                 }
               }}
-              className="p-2 rounded-xl text-slate-600 hover:bg-slate-100 transition border border-slate-200 bg-white"
+              className="w-9 h-9 rounded-xl flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition border border-slate-200/80 bg-white shadow-2xs"
               aria-label="Bagikan"
             >
-              <Share2 className="w-4.5 h-4.5" />
+              <Share2 className="w-4 h-4" />
             </button>
             <Link
               href="/cart"
-              className="relative p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition border border-slate-200 bg-white"
+              className="relative w-9 h-9 rounded-xl flex items-center justify-center text-slate-700 hover:bg-slate-100 transition border border-slate-200/80 bg-white shadow-2xs"
+              aria-label="Keranjang Belanja"
             >
-              <ShoppingBag className="w-4.5 h-4.5 text-sky-600" />
+              <ShoppingBag className="w-4 h-4 text-sky-600" />
               {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-sky-600 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center">
-                  {itemCount}
+                <span className="absolute -top-1.5 -right-1.5 bg-sky-600 text-white text-[10px] font-extrabold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-xs ring-2 ring-white leading-none">
+                  {itemCount > 99 ? '99+' : itemCount}
                 </span>
               )}
             </Link>

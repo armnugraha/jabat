@@ -152,14 +152,14 @@ export const Header: React.FC<HeaderProps> = ({
             {rightAction}
             <Link
               href="/cart"
-              className="relative p-2 rounded-xl text-slate-700 hover:bg-slate-100 transition flex items-center justify-center border border-slate-200 bg-white"
+              className="relative w-9 h-9 rounded-xl text-slate-700 hover:bg-slate-100 transition flex items-center justify-center border border-slate-200/80 bg-white shadow-2xs"
               aria-label="Keranjang Belanja"
               title="Keranjang Belanja"
             >
-              <ShoppingBag className="w-5 h-5 text-sky-600" />
+              <ShoppingBag className="w-4.5 h-4.5 text-sky-600" />
               {itemCount > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 bg-sky-600 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center shadow-sm">
-                  {itemCount}
+                <span className="absolute -top-1.5 -right-1.5 bg-sky-600 text-white text-[10px] font-extrabold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-xs ring-2 ring-white leading-none">
+                  {itemCount > 99 ? '99+' : itemCount}
                 </span>
               )}
             </Link>
