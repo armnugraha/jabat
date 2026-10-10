@@ -1,19 +1,23 @@
 import { NextResponse } from 'next/server';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { mockPromotions } from '@/lib/data/mock-data';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     if (isSupabaseConfigured()) {
+      const supabase = await getSupabaseAdminClient();
       const { data, error } = await supabase
         .from('promotions')
         .select('*')
         .eq('is_active', true)
         .order('created_at', { ascending: false });
 
-      if (data && !error && data.length > 0) {
+      if (error) {
+        console.error('Supabase promotions fetch error:', error);
+      } else if (data) {
         return NextResponse.json({
           success: true,
           data,
@@ -49,7 +53,6 @@ export async function POST(request: Request) {
     }
 
     const newPromo = {
-      id: `p-${Date.now()}`,
       code: code.trim().toUpperCase(),
       title: title.trim(),
       description: description || '',
@@ -61,14 +64,19 @@ export async function POST(request: Request) {
     };
 
     if (isSupabaseConfigured()) {
+      const supabase = await getSupabaseAdminClient();
       const { data, error } = await supabase.from('promotions').insert([newPromo]).select().single();
-      if (data && !error) {
-        return NextResponse.json({
-          success: true,
-          data,
-          message: 'Promo voucher berhasil disimpan di Supabase',
-        });
+      if (error) {
+        return NextResponse.json(
+          { success: false, error: error.message || 'Gagal menyimpan promo ke Supabase' },
+          { status: 500 }
+        );
       }
+      return NextResponse.json({
+        success: true,
+        data,
+        message: 'Promo voucher berhasil disimpan di Supabase',
+      });
     }
 
     return NextResponse.json({
@@ -84,3 +92,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

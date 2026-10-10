@@ -28,9 +28,9 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/orders?role=admin').then((r) => r.json()),
-      fetch('/api/products').then((r) => r.json()),
-      fetch('/api/store').then((r) => r.json()),
+      fetch('/api/orders?role=admin', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/products', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/store', { cache: 'no-store' }).then((r) => r.json()),
     ])
       .then(([ordersJson, productsJson, storeJson]) => {
         if (ordersJson.success && ordersJson.data) setOrders(ordersJson.data);

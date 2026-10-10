@@ -39,7 +39,7 @@ export default function AdminLayout({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
-    fetch('/api/store')
+    fetch('/api/store', { cache: 'no-store' })
       .then((r) => r.json())
       .then((json) => {
         if (json.success && json.data) setStoreSettings(json.data);

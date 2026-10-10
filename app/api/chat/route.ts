@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,7 @@ export async function GET(request: Request) {
         sender_id: 'pharm-siti',
         sender_name: 'apt. Siti Rahma, S.Farm.',
         sender_role: 'pharmacist',
-        message: 'Halo! Selamat datang di Meja Konsultasi Apotek Sehat Mandiri. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?',
+        message: 'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?',
         created_at: new Date(Date.now() - 1000 * 60 * 10).toISOString(),
         is_read: true,
       },
@@ -33,6 +34,7 @@ export async function GET(request: Request) {
 
     if (isSupabaseConfigured()) {
       try {
+        const supabase = await getSupabaseAdminClient(request);
         const { data: conv } = await supabase
           .from('conversations')
           .select('id')
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
 
     if (isSupabaseConfigured()) {
       try {
+        const supabase = await getSupabaseAdminClient(request);
         // Upsert conversation
         let { data: conv } = await supabase
           .from('conversations')
@@ -144,3 +147,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

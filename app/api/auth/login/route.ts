@@ -77,6 +77,7 @@ export async function POST(request: Request) {
           options: {
             data: {
               role: defaultRole,
+              display_name: defaultName,
               full_name: defaultName,
               phone: cleanIdentifier.includes('@') ? '' : cleanIdentifier,
             },
@@ -133,7 +134,12 @@ export async function POST(request: Request) {
 
     const userMetadata = authData.user.user_metadata || {};
     const determinedRole = profile?.role || userMetadata.role || 'customer';
-    const determinedName = profile?.full_name || userMetadata.full_name || cleanIdentifier.split('@')[0];
+    const determinedName =
+      profile?.full_name ||
+      userMetadata.display_name ||
+      userMetadata.full_name ||
+      userMetadata.name ||
+      cleanIdentifier.split('@')[0];
     const determinedPhone = profile?.phone || userMetadata.phone || '';
     const determinedAvatar = profile?.avatar_url || userMetadata.avatar_url || null;
     const determinedSipa = profile?.sipa_number || userMetadata.sipa_number || null;

@@ -26,6 +26,7 @@ export async function POST(request: Request) {
 
     let userId = `user-${Date.now()}`;
     let registeredUser = null;
+    let authSession = null;
 
     if (isSupabaseConfigured()) {
       const { data, error } = await supabase.auth.signUp({
@@ -33,6 +34,7 @@ export async function POST(request: Request) {
         password: cleanPassword,
         options: {
           data: {
+            display_name: cleanName,
             full_name: cleanName,
             phone: cleanPhone,
             role: 'customer',
@@ -51,6 +53,10 @@ export async function POST(request: Request) {
           );
         }
         console.warn('Supabase SignUp notice:', error.message);
+      }
+
+      if (data?.session) {
+        authSession = data.session;
       }
 
       if (data?.user?.id) {
@@ -91,6 +97,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       user: registeredUser,
+      session: authSession,
+      token: authSession?.access_token || null,
       message: 'Pendaftaran berhasil. Selamat datang di Apotek Sehat Mandiri!',
     });
   } catch (err: any) {

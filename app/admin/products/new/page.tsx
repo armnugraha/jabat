@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -14,17 +14,47 @@ import {
   Package,
   Layers,
   Loader2,
+  Upload,
+  X,
+  FileImage,
 } from 'lucide-react';
 import { mockCategories } from '@/lib/data/mock-data';
 import { Category, ProductVariant } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 
+const PACKAGING_NAME_PRESETS = [
+  'Strip',
+  'Box / Kotak',
+  'Botol / Sirup',
+  'Tablet / Kaplet',
+  'Sachet',
+  'Ampul / Vial',
+  'Tube / Salep',
+  'Pcs / Satuan',
+  'Lainnya',
+];
+
+const UNIT_PRESETS = [
+  'tablet',
+  'kapsul',
+  'kaplet',
+  'ml',
+  'gram',
+  'strip',
+  'sachet',
+  'botol',
+  'pcs',
+  'Lainnya',
+];
+
 export default function NewProductPage() {
   const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>(mockCategories);
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Basic Info
   const [name, setName] = useState('');
@@ -37,34 +67,50 @@ export default function NewProductPage() {
   );
   const [requiresPrescription, setRequiresPrescription] = useState(false);
   const [isActive, setIsActive] = useState(true);
+  const [isFeatured, setIsFeatured] = useState(false);
   const [indications, setIndications] = useState('');
   const [composition, setComposition] = useState('');
   const [dosage, setDosage] = useState('');
   const [precautions, setPrecautions] = useState('');
+  const [storageInstructions, setStorageInstructions] = useState(
+    'Simpan pada suhu ruangan (<30°C), tempat sejuk dan kering, terlindung dari paparan cahaya matahari langsung.'
+  );
 
   // Fetch categories from API
   useEffect(() => {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && json.data) {
+        if (json.success && json.data && json.data.length > 0) {
           setCategories(json.data);
-          if (json.data.length > 0) setCategoryId(json.data[0].id);
+          setCategoryId(json.data[0].id);
         }
       })
       .catch((err) => console.error('Failed fetching categories:', err));
   }, []);
 
   // Variants / Packaging Builder
-  const [variants, setVariants] = useState<Partial<ProductVariant>[]>([
+  const [variants, setVariants] = useState<{
+    id: string;
+    name: string;
+    customName?: string;
+    unit: string;
+    customUnit?: string;
+    quantity_per_package: number;
+    price: number;
+    strike_price?: number;
+    stock: number;
+    is_active: boolean;
+  }[]>([
     {
-      id: 'v-new-1',
+      id: `v-new-${Date.now()}-1`,
       name: 'Strip',
+      customName: '',
       unit: 'tablet',
+      customUnit: '',
       quantity_per_package: 10,
       price: 15000,
       strike_price: 18000,
-      discount_percentage: 17,
       stock: 50,
       is_active: true,
     },
@@ -74,13 +120,14 @@ export default function NewProductPage() {
     setVariants((prev) => [
       ...prev,
       {
-        id: `v-new-${Date.now()}`,
-        name: 'Box',
+        id: `v-new-${Date.now()}-${prev.length + 1}`,
+        name: 'Box / Kotak',
+        customName: '',
         unit: 'strip',
+        customUnit: '',
         quantity_per_package: 10,
         price: 140000,
         strike_price: 175000,
-        discount_percentage: 20,
         stock: 15,
         is_active: true,
       },
@@ -103,6 +150,35 @@ export default function NewProductPage() {
     });
   };
 
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('bucket', 'products');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const json = await res.json();
+      if (json.success && json.url) {
+        setImageUrl(json.url);
+      } else {
+        alert(json.error || 'Gagal mengunggah foto');
+      }
+    } catch (err) {
+      console.error('Upload error:', err);
+      alert('Gagal mengunggah file foto ke server.');
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
@@ -112,6 +188,22 @@ export default function NewProductPage() {
 
     setIsSaving(true);
     try {
+      const formattedVariants = variants.map((v) => {
+        const finalName = v.name === 'Lainnya' ? v.customName || 'Satuan' : v.name;
+        const finalUnit = v.unit === 'Lainnya' ? v.customUnit || 'pcs' : v.unit;
+
+        return {
+          id: v.id,
+          name: finalName.trim(),
+          unit: finalUnit.trim(),
+          quantity_per_package: Number(v.quantity_per_package) || 1,
+          price: Number(v.price) || 0,
+          strike_price: v.strike_price ? Number(v.strike_price) : undefined,
+          stock: Number(v.stock) || 0,
+          is_active: v.is_active !== false,
+        };
+      });
+
       const payload = {
         name: name.trim(),
         description: description.trim(),
@@ -121,11 +213,13 @@ export default function NewProductPage() {
         image_url: imageUrl.trim(),
         requires_prescription: requiresPrescription,
         is_active: isActive,
+        is_featured: isFeatured,
         indications: indications.trim(),
         composition: composition.trim(),
         dosage: dosage.trim(),
         precautions: precautions.trim(),
-        variants,
+        storage_instructions: storageInstructions.trim(),
+        variants: formattedVariants,
       };
 
       const res = await fetch('/api/products', {
@@ -143,7 +237,7 @@ export default function NewProductPage() {
       }
     } catch (err: any) {
       console.error('Failed saving product:', err);
-      alert('Gagal menyimpan produk ke API.');
+      alert('Gagal menyimpan produk ke server.');
     } finally {
       setIsSaving(false);
     }
@@ -209,7 +303,7 @@ export default function NewProductPage() {
             <select
               value={categoryId}
               onChange={(e) => setCategoryId(e.target.value)}
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3.5 text-xs font-medium text-slate-900 focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3.5 text-xs font-semibold text-slate-900 focus:outline-none"
             >
               {categories.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -245,22 +339,61 @@ export default function NewProductPage() {
             />
           </div>
 
-          <div>
-            <label className="block text-xs font-bold text-slate-700 mb-1">
-              URL Foto Produk Obat
+          {/* Image Upload Component to Supabase Storage */}
+          <div className="sm:col-span-2 space-y-2">
+            <label className="block text-xs font-bold text-slate-700">
+              Foto Produk Obat (Supabase Storage)
             </label>
-            <input
-              type="url"
-              value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3.5 text-xs font-medium text-slate-900 focus:outline-none"
-            />
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-50 rounded-2xl p-3.5 border border-slate-200">
+              <div className="w-20 h-20 rounded-2xl bg-white border border-slate-200 p-1 flex items-center justify-center overflow-hidden shrink-0">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt="Preview"
+                    className="w-full h-full object-contain mix-blend-multiply"
+                  />
+                ) : (
+                  <FileImage className="w-8 h-8 text-slate-300" />
+                )}
+              </div>
+
+              <div className="flex-1 space-y-2 w-full">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    accept="image/*"
+                    onChange={handleImageFileChange}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploadingImage}
+                    className="px-3.5 py-2 rounded-xl bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 shadow-2xs transition"
+                  >
+                    {isUploadingImage ? (
+                      <Loader2 className="w-4 h-4 animate-spin text-sky-600" />
+                    ) : (
+                      <Upload className="w-4 h-4 text-sky-600" />
+                    )}
+                    <span>{isUploadingImage ? 'Mengunggah ke Storage...' : 'Upload Gambar Baru'}</span>
+                  </button>
+                </div>
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="Atau tempel URL gambar (https://...)"
+                  className="w-full bg-white border border-slate-200 rounded-xl py-1.5 px-3 text-[11px] font-mono text-slate-600 focus:outline-none"
+                />
+              </div>
+            </div>
           </div>
 
           <div className="sm:col-span-2">
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Deskripsi & Indikasi Umum
+              Deskripsi Singkat & Khasiat
             </label>
             <textarea
               rows={3}
@@ -268,6 +401,32 @@ export default function NewProductPage() {
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Jelaskan manfaat obat dan kegunaannya..."
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Kandungan / Komposisi Zat Aktif
+            </label>
+            <input
+              type="text"
+              value={composition}
+              onChange={(e) => setComposition(e.target.value)}
+              placeholder="Tiap tablet mengandung..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2 px-3 text-xs focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Dosis & Aturan Minum
+            </label>
+            <input
+              type="text"
+              value={dosage}
+              onChange={(e) => setDosage(e.target.value)}
+              placeholder="Dewasa: 1 tablet 3x sehari..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2 px-3 text-xs focus:outline-none"
             />
           </div>
         </div>
@@ -326,17 +485,18 @@ export default function NewProductPage() {
               <span>3. Atur Varian Kemasan & Harga (Packaging Builder)</span>
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
-              Obat dapat dijual per Tablet, Strip, Botol, Box, dll.
+              Pilih nama kemasan dan satuan isi dari dropdown, atau pilih &quot;Lainnya&quot; untuk input manual.
             </p>
           </div>
 
+          {/* Clean Add Button (No duplicate + icon) */}
           <button
             type="button"
             onClick={addVariant}
-            className="px-3 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold flex items-center gap-1 transition"
+            className="px-3.5 py-1.5 rounded-xl bg-sky-50 text-sky-700 hover:bg-sky-100 text-xs font-bold flex items-center gap-1.5 transition"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ Tambah Kemasan</span>
+            <span>Tambah Kemasan</span>
           </button>
         </div>
 
@@ -363,30 +523,66 @@ export default function NewProductPage() {
               </div>
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                {/* Packaging Name Dropdown + Free Text */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
                     Nama Kemasan
                   </label>
-                  <input
-                    type="text"
-                    value={v.name}
-                    onChange={(e) => updateVariant(index, 'name', e.target.value)}
-                    placeholder="Strip, Box, Botol"
-                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 focus:outline-none"
-                  />
+                  <select
+                    value={PACKAGING_NAME_PRESETS.includes(v.name) ? v.name : 'Lainnya'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateVariant(index, 'name', val);
+                      if (val !== 'Lainnya') updateVariant(index, 'customName', '');
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2.5 font-semibold text-slate-800 focus:outline-none"
+                  >
+                    {PACKAGING_NAME_PRESETS.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                  {(!PACKAGING_NAME_PRESETS.includes(v.name) || v.name === 'Lainnya') && (
+                    <input
+                      type="text"
+                      value={v.customName || (v.name !== 'Lainnya' ? v.name : '')}
+                      onChange={(e) => updateVariant(index, 'customName', e.target.value)}
+                      placeholder="Ketik nama kemasan..."
+                      className="w-full bg-white border border-sky-300 rounded-xl py-1.5 px-2.5 text-xs font-bold text-sky-800 focus:outline-none"
+                    />
+                  )}
                 </div>
 
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                {/* Satuan Isi Dropdown + Free Text */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-slate-700">
                     Satuan Isi
                   </label>
-                  <input
-                    type="text"
-                    value={v.unit}
-                    onChange={(e) => updateVariant(index, 'unit', e.target.value)}
-                    placeholder="tablet, ml, sachet"
-                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-3 focus:outline-none"
-                  />
+                  <select
+                    value={UNIT_PRESETS.includes(v.unit) ? v.unit : 'Lainnya'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      updateVariant(index, 'unit', val);
+                      if (val !== 'Lainnya') updateVariant(index, 'customUnit', '');
+                    }}
+                    className="w-full bg-white border border-slate-200 rounded-xl py-2 px-2.5 font-semibold text-slate-800 focus:outline-none"
+                  >
+                    {UNIT_PRESETS.map((u) => (
+                      <option key={u} value={u}>
+                        {u}
+                      </option>
+                    ))}
+                  </select>
+                  {(!UNIT_PRESETS.includes(v.unit) || v.unit === 'Lainnya') && (
+                    <input
+                      type="text"
+                      value={v.customUnit || (v.unit !== 'Lainnya' ? v.unit : '')}
+                      onChange={(e) => updateVariant(index, 'customUnit', e.target.value)}
+                      placeholder="Ketik satuan isi..."
+                      className="w-full bg-white border border-sky-300 rounded-xl py-1.5 px-2.5 text-xs font-bold text-sky-800 focus:outline-none"
+                    />
+                  )}
                 </div>
 
                 <div>

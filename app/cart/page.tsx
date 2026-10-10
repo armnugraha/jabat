@@ -25,28 +25,21 @@ import {
   ChevronRight,
   Info,
   Building,
+  Check,
+  Edit2,
+  AlertCircle,
+  Loader2,
+  Copy,
 } from 'lucide-react';
 import { useCart } from '@/lib/store/cart-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { formatRupiah } from '@/lib/utils';
-import { mockCustomerAddress } from '@/lib/data/mock-data';
-import { DeliveryOption, PaymentMethod, Promotion } from '@/lib/types';
+import { DeliveryOption, PaymentMethod, Promotion, CustomerAddress } from '@/lib/types';
 
 export default function CartPage() {
   const router = useRouter();
-  const { user } = useAuth();
-  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([]);
+  const { user, authFetch } = useAuth();
 
-  useEffect(() => {
-    fetch('/api/promotions')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          setAvailablePromotions(json.data);
-        }
-      })
-      .catch((err) => console.error('Failed to load promotions:', err));
-  }, []);
   const {
     items,
     updateQuantity,
@@ -75,13 +68,106 @@ export default function CartPage() {
     hasPrescriptionItems,
     total,
     clearCart,
+    isLoaded,
+    storeSettings,
+    availablePromotions,
   } = useCart();
+
+  // Addresses state
+  const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<CustomerAddress | null>(null);
+  const [isLoadingAddresses, setIsLoadingAddresses] = useState(false);
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [isAddingAddress, setIsAddingAddress] = useState(false);
+
+  // New Address Form State
+  const [newLabel, setNewLabel] = useState('Rumah');
+  const [newRecipientName, setNewRecipientName] = useState('');
+  const [newPhone, setNewPhone] = useState('');
+  const [newAddressLine, setNewAddressLine] = useState('');
+  const [newSubdistrict, setNewSubdistrict] = useState('');
+  const [newCity, setNewCity] = useState('Jakarta Selatan');
+  const [newPostalCode, setNewPostalCode] = useState('');
+  const [newNotes, setNewNotes] = useState('');
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  // Fetch addresses from API when user is logged in
+  const loadAddresses = () => {
+    if (!user?.id) {
+      setAddresses([]);
+      setSelectedAddress(null);
+      return;
+    }
+    setIsLoadingAddresses(true);
+
+    authFetch(`/api/addresses?userId=${user.id}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data && json.data.length > 0) {
+          setAddresses(json.data);
+          const primary = json.data.find((a: CustomerAddress) => a.is_primary) || json.data[0];
+          setSelectedAddress(primary);
+        }
+      })
+      .catch((err) => console.error('Failed loading addresses:', err))
+      .finally(() => setIsLoadingAddresses(false));
+  };
+
+  useEffect(() => {
+    loadAddresses();
+    if (user) {
+      setNewRecipientName(user.full_name || '');
+      setNewPhone(user.phone || '');
+    }
+  }, [user]);
 
   const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
   const [promoInput, setPromoInput] = useState('');
   const [promoError, setPromoError] = useState('');
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [prescriptionNotes, setPrescriptionNotes] = useState('');
+  const [copiedBankId, setCopiedBankId] = useState<string | null>(null);
+
+  const bankAccounts = (storeSettings?.bank_accounts && storeSettings.bank_accounts.length > 0)
+    ? storeSettings.bank_accounts
+    : storeSettings?.bank_account_number
+    ? [
+        {
+          id: 'acc-default',
+          bank_name: storeSettings.bank_name || 'Bank Central Asia (BCA)',
+          account_number: storeSettings.bank_account_number,
+          account_holder: storeSettings.bank_account_holder || storeSettings.store_name || 'Apotek Jabat',
+        },
+      ]
+    : [];
+
+  const isQrisAvailable = storeSettings?.qris_enabled !== false;
+  const isBankTransferAvailable = storeSettings?.bank_transfer_enabled !== false && bankAccounts.length > 0;
+  const isCodAvailable = storeSettings?.cod_enabled !== false;
+
+  // Auto-switch payment method if selected method is disabled in store settings
+  useEffect(() => {
+    if (storeSettings) {
+      if (paymentMethod === 'qris' && !isQrisAvailable) {
+        if (isBankTransferAvailable) setPaymentMethod('bank_transfer');
+        else if (isCodAvailable) setPaymentMethod('cod');
+      } else if (paymentMethod === 'bank_transfer' && !isBankTransferAvailable) {
+        if (isQrisAvailable) setPaymentMethod('qris');
+        else if (isCodAvailable) setPaymentMethod('cod');
+      } else if (paymentMethod === 'cod' && !isCodAvailable) {
+        if (isQrisAvailable) setPaymentMethod('qris');
+        else if (isBankTransferAvailable) setPaymentMethod('bank_transfer');
+      }
+    }
+  }, [storeSettings, isQrisAvailable, isBankTransferAvailable, isCodAvailable, paymentMethod, setPaymentMethod]);
+
+  const handleCopyAccount = (id: string, text: string) => {
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(text);
+      setCopiedBankId(id);
+      setTimeout(() => setCopiedBankId(null), 2500);
+    }
+  };
 
   const handleApplyPromo = () => {
     setPromoError('');
@@ -100,10 +186,71 @@ export default function CartPage() {
     }
   };
 
+  const handleSaveNewAddress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      alert('Silakan masuk ke akun Anda terlebih dahulu.');
+      return;
+    }
+    if (!newRecipientName.trim() || !newPhone.trim() || !newAddressLine.trim()) {
+      alert('Nama penerima, nomor telepon, dan alamat lengkap wajib diisi.');
+      return;
+    }
+
+    setIsSavingAddress(true);
+    try {
+      const res = await authFetch('/api/addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerId: user.id,
+          label: newLabel,
+          recipientName: newRecipientName.trim(),
+          phone: newPhone.trim(),
+          addressLine: newAddressLine.trim(),
+          subdistrict: newSubdistrict.trim(),
+          city: newCity.trim(),
+          postalCode: newPostalCode.trim(),
+          deliveryNotes: newNotes.trim(),
+          isPrimary: addresses.length === 0,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success && json.data) {
+        const newAddr = json.data;
+        const updatedList = [newAddr, ...addresses.filter((a) => a.id !== newAddr.id)];
+        setAddresses(updatedList);
+        setSelectedAddress(newAddr);
+
+        setIsAddingAddress(false);
+        setIsAddressModalOpen(false);
+        // Reset form fields
+        setNewAddressLine('');
+        setNewSubdistrict('');
+        setNewPostalCode('');
+        setNewNotes('');
+      } else {
+        alert(json.error || 'Gagal menyimpan alamat');
+      }
+    } catch (err) {
+      console.error('Save address error:', err);
+      alert('Gagal menyimpan alamat pengiriman.');
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
+
   const handleCheckout = async () => {
     if (!user) {
       alert('Silakan masuk (login) ke akun Anda terlebih dahulu sebelum melakukan checkout pesanan.');
       router.push('/account');
+      return;
+    }
+
+    if (!selectedAddress) {
+      alert('Silakan tambahkan atau pilih alamat pengiriman Anda terlebih dahulu.');
+      setIsAddressModalOpen(true);
       return;
     }
 
@@ -120,20 +267,26 @@ export default function CartPage() {
     setIsPlacingOrder(true);
     try {
       const selectedList = items.filter((it) => it.selected);
-      const res = await fetch('/api/orders', {
+      const res = await authFetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerId: user.id,
-          customerName: user.full_name,
-          customerPhone: user.phone,
+          customerName: user.full_name || selectedAddress.recipient_name,
+          customerPhone: user.phone || selectedAddress.phone,
           items: selectedList,
           subtotal,
           discount: productDiscountTotal + promoDiscount,
           deliveryFee,
           total,
           deliveryOption,
-          deliveryAddress: mockCustomerAddress,
+          deliveryAddress: {
+            label: selectedAddress.label,
+            recipient_name: selectedAddress.recipient_name,
+            phone: selectedAddress.phone,
+            address_line: `${selectedAddress.address_line}${selectedAddress.subdistrict ? ', ' + selectedAddress.subdistrict : ''}${selectedAddress.city ? ', ' + selectedAddress.city : ''}${selectedAddress.postal_code ? ' ' + selectedAddress.postal_code : ''}`,
+            notes: selectedAddress.delivery_notes || customerNotes,
+          },
           paymentMethod,
           customerNotes,
           requiresPrescription: hasPrescriptionItems,
@@ -154,6 +307,7 @@ export default function CartPage() {
       setIsPlacingOrder(false);
     }
   };
+
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 pb-32">
@@ -186,7 +340,13 @@ export default function CartPage() {
       </header>
 
       <main className="max-w-5xl mx-auto w-full px-4 sm:px-6 md:px-8 space-y-4 pt-4">
-        {items.length > 0 ? (
+        {!isLoaded ? (
+          <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center my-6 shadow-stitch flex flex-col items-center justify-center space-y-3">
+            <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
+            <p className="text-xs font-bold text-slate-700">Memuat keranjang belanja Anda...</p>
+            <p className="text-[11px] text-slate-400">Sinkronisasi data keranjang farmasi...</p>
+          </div>
+        ) : items.length > 0 ? (
           <>
             {/* Select All Row */}
             <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200/80 p-3 shadow-stitch text-xs">
@@ -204,7 +364,9 @@ export default function CartPage() {
 
               <div className="text-[11px] text-slate-500 font-medium flex items-center gap-1">
                 <Building className="w-3.5 h-3.5 text-slate-400" />
-                <span>Apotek Jabat - Tebet</span>
+                <span>
+                  {storeSettings?.store_name || 'Apotek Sehat Mandiri'} – {storeSettings?.branch_name || 'Tebet Barat'}
+                </span>
               </div>
             </div>
 
@@ -220,6 +382,9 @@ export default function CartPage() {
             <div className="space-y-3">
               {items.map((item) => {
                 const isPrescription = item.product.requires_prescription;
+                const maxStock = item.variant.stock || 999;
+                const isMaxStockReached = item.quantity >= maxStock;
+
                 return (
                   <div
                     key={item.id}
@@ -270,7 +435,7 @@ export default function CartPage() {
                           {item.product.name}
                         </h4>
                         <p className="text-[10px] text-slate-500 line-clamp-1">
-                          Kemasan: {item.variant.name} ({item.variant.quantity_per_package} {item.variant.unit})
+                          Kemasan: {item.variant.name} ({item.variant.quantity_per_package} {item.variant.unit}) • Sisa Stok: {item.variant.stock}
                         </p>
 
                         <div className="flex items-baseline gap-1.5 mt-1">
@@ -296,22 +461,51 @@ export default function CartPage() {
                         <span>Hapus</span>
                       </button>
 
-                      <div className="flex items-center gap-2 border border-slate-200 rounded-lg p-0.5 bg-slate-50">
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity - 1)}
-                          className="w-5 h-5 flex items-center justify-center rounded bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="w-6 text-center text-xs font-bold text-slate-900">
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => updateQuantity(item.id, item.quantity + 1)}
-                          className="w-5 h-5 flex items-center justify-center rounded bg-white text-slate-700 hover:bg-slate-100 text-xs font-bold"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                      <div className="flex items-center gap-1.5">
+                        {isMaxStockReached && (
+                          <span className="text-[9px] text-amber-600 font-bold hidden sm:inline">
+                            Maks. stok ({maxStock})
+                          </span>
+                        )}
+                        <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-1 bg-slate-50">
+                          <button
+                            onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                            disabled={item.quantity <= 1}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
+                          >
+                            <Minus className="w-3 h-3" />
+                          </button>
+
+                          {/* Manual typing quantity input strictly text-center */}
+                          <input
+                            type="number"
+                            min="1"
+                            max={maxStock}
+                            value={item.quantity}
+                            onChange={(e) => {
+                              const typed = parseInt(e.target.value, 10);
+                              if (isNaN(typed) || typed < 1) {
+                                updateQuantity(item.id, 1);
+                              } else {
+                                updateQuantity(item.id, Math.min(typed, maxStock));
+                              }
+                            }}
+                            className="w-10 text-center text-xs font-extrabold text-slate-900 bg-white border border-slate-200/80 rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                            style={{ textAlign: 'center' }}
+                          />
+
+                          <button
+                            onClick={() => {
+                              if (item.quantity < maxStock) {
+                                updateQuantity(item.id, item.quantity + 1);
+                              }
+                            }}
+                            disabled={isMaxStockReached}
+                            className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -389,27 +583,78 @@ export default function CartPage() {
                     Alamat Pengiriman
                   </h3>
                 </div>
-                <button className="text-[11px] font-bold text-sky-600 hover:text-sky-700">
-                  Ubah Alamat
-                </button>
+                {user && (
+                  <button
+                    onClick={() => {
+                      setIsAddingAddress(false);
+                      setIsAddressModalOpen(true);
+                    }}
+                    className="text-[11px] font-bold text-sky-600 hover:text-sky-700"
+                  >
+                    Ubah Alamat
+                  </button>
+                )}
               </div>
 
-              <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/70 space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-slate-900">
-                    Rumah – {user?.full_name || mockCustomerAddress.recipient_name}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded-md bg-sky-600 text-white text-[9px] font-bold">
-                    Utama
-                  </span>
+              {!user ? (
+                /* STATE A: NOT LOGGED IN -> PROMPT TO LOGIN (No dummy data displayed) */
+                <div className="bg-amber-50 rounded-2xl p-3.5 border border-amber-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="text-xs font-bold text-amber-900">Belum Masuk ke Akun</h4>
+                      <p className="text-[11px] text-amber-700 mt-0.5 leading-relaxed">
+                        Silakan masuk ke akun Anda terlebih dahulu untuk menampilkan dan memilih alamat pengiriman resmi.
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/account"
+                    className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shrink-0 shadow-xs transition"
+                  >
+                    Masuk / Daftar
+                  </Link>
                 </div>
-                <div className="text-[11px] text-slate-500 font-mono">
-                  ({user?.phone || mockCustomerAddress.phone})
+              ) : selectedAddress ? (
+                /* STATE B: LOGGED IN WITH ADDRESS */
+                <div className="bg-slate-50 rounded-2xl p-3 border border-slate-200/70 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-900">
+                      {selectedAddress.label} – {selectedAddress.recipient_name}
+                    </span>
+                    {selectedAddress.is_primary && (
+                      <span className="px-1.5 py-0.5 rounded-md bg-sky-600 text-white text-[9px] font-bold">
+                        Utama
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    ({selectedAddress.phone})
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    {selectedAddress.address_line}
+                    {selectedAddress.subdistrict && `, ${selectedAddress.subdistrict}`}
+                    {selectedAddress.city && `, ${selectedAddress.city}`}
+                    {selectedAddress.postal_code && ` ${selectedAddress.postal_code}`}
+                  </p>
                 </div>
-                <p className="text-xs text-slate-700 leading-relaxed">
-                  {mockCustomerAddress.address_line}, {mockCustomerAddress.subdistrict}, {mockCustomerAddress.city} {mockCustomerAddress.postal_code}
-                </p>
-              </div>
+              ) : (
+                /* STATE C: LOGGED IN BUT NO ADDRESS YET */
+                <div className="bg-slate-50 rounded-2xl p-3.5 border border-dashed border-slate-300 text-center space-y-2">
+                  <p className="text-xs text-slate-600 font-medium">
+                    Belum ada alamat tersimpan di akun Anda.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setIsAddingAddress(true);
+                      setIsAddressModalOpen(true);
+                    }}
+                    className="px-4 py-1.5 rounded-xl bg-sky-600 text-white font-bold text-xs shadow-xs hover:bg-sky-700 transition"
+                  >
+                    + Tambah Alamat Pengiriman
+                  </button>
+                </div>
+              )}
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 mb-1 flex items-center gap-1">
@@ -464,7 +709,7 @@ export default function CartPage() {
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="text-xs font-bold text-slate-900">
-                          Kurir Express Apotek Tebet
+                          Kurir Express {storeSettings?.store_name || 'Apotek'} {storeSettings?.branch_name || 'Tebet'}
                         </span>
                         <span className="px-1.5 py-0.2 rounded bg-sky-600 text-white text-[8px] font-extrabold uppercase">
                           Rekomendasi
@@ -476,7 +721,11 @@ export default function CartPage() {
                     </div>
                   </div>
                   <span className="text-xs font-bold text-slate-900 shrink-0">
-                    Rp 10.000
+                    {subtotal >= (storeSettings?.free_delivery_threshold || 100000) && subtotal > 0 ? (
+                      <span className="text-emerald-600">Gratis (Promo)</span>
+                    ) : (
+                      formatRupiah(storeSettings?.express_delivery_fee || 10000)
+                    )}
                   </span>
                 </button>
 
@@ -511,7 +760,7 @@ export default function CartPage() {
                     </div>
                   </div>
                   <span className="text-xs font-bold text-slate-900 shrink-0">
-                    Rp 15.000
+                    {formatRupiah(storeSettings?.regular_delivery_fee || 15000)}
                   </span>
                 </button>
 
@@ -538,7 +787,7 @@ export default function CartPage() {
                     </div>
                     <div>
                       <span className="text-xs font-bold text-slate-900">
-                        Ambil Sendiri di Apotek
+                        Ambil Sendiri di {storeSettings?.store_name || 'Apotek'}
                       </span>
                       <p className="text-[10px] text-slate-500 mt-0.5">
                         Siap diambil dalam 15 menit di counter farmasi
@@ -551,6 +800,7 @@ export default function CartPage() {
                 </button>
               </div>
             </div>
+
 
             {/* Voucher & Promo Farmasi Section (Stitch Screen 4) */}
             <button
@@ -566,21 +816,31 @@ export default function CartPage() {
                     <span className="text-xs font-bold text-slate-900">
                       Voucher & Promo Farmasi
                     </span>
-                    {appliedPromo && (
+                    {appliedPromo && promoDiscount > 0 && (
                       <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
                         1 Digunakan
                       </span>
                     )}
+                    {appliedPromo && promoDiscount === 0 && (
+                      <span className="px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200 text-[9px] font-bold">
+                        Belum Memenuhi Min. Belanja
+                      </span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-sky-700 font-semibold mt-0.5">
-                    {appliedPromo
-                      ? `${appliedPromo.code} • Potongan ${formatRupiah(appliedPromo.discount_value)}`
-                      : 'Gunakan voucher hemat'}
+                  <p className="text-[11px] font-semibold mt-0.5">
+                    {appliedPromo && promoDiscount > 0 ? (
+                      <span className="text-emerald-700">{appliedPromo.code} • Hemat {formatRupiah(promoDiscount)}</span>
+                    ) : appliedPromo && promoDiscount === 0 ? (
+                      <span className="text-amber-700">{appliedPromo.code} • Min. belanja {formatRupiah(appliedPromo.min_order_amount)}</span>
+                    ) : (
+                      <span className="text-sky-700">Gunakan voucher promo hemat</span>
+                    )}
                   </p>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-400" />
             </button>
+
 
             {/* Metode Pembayaran (Stitch Screen 4) */}
             <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-stitch space-y-3">
@@ -594,90 +854,201 @@ export default function CartPage() {
                 <span className="text-[11px] font-bold text-sky-600">Pilih</span>
               </div>
 
-              <div className="space-y-2">
-                <button
-                  onClick={() => setPaymentMethod('qris')}
-                  className={`w-full p-3 rounded-2xl border flex items-center justify-between transition ${
+              <div className="space-y-2.5">
+                {/* 1. QRIS Option */}
+                {isQrisAvailable && (
+                  <div className={`rounded-2xl border transition overflow-hidden ${
                     paymentMethod === 'qris'
-                      ? 'border-sky-600 bg-sky-50/40'
+                      ? 'border-sky-600 bg-sky-50/30'
                       : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-extrabold text-[10px] text-sky-800">
-                      QRIS
-                    </div>
-                    <div className="text-left">
-                      <div className="text-xs font-bold text-slate-900">
-                        QRIS / GoPay / OVO
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('qris')}
+                      className="w-full p-3 flex items-center justify-between transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-7 rounded-lg bg-sky-100 border border-sky-200 flex items-center justify-center font-extrabold text-[10px] text-sky-800">
+                          QRIS
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs font-bold text-slate-900">
+                            QRIS / GoPay / OVO / ShopeePay
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Konfirmasi Instan Bebas Biaya Layanan
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        Konfirmasi Instan Bebas Biaya Layanan
-                      </div>
-                    </div>
-                  </div>
-                  <ShieldCheck
-                    className={`w-4 h-4 ${
-                      paymentMethod === 'qris' ? 'text-sky-600' : 'text-slate-300'
-                    }`}
-                  />
-                </button>
+                      <ShieldCheck
+                        className={`w-4 h-4 ${
+                          paymentMethod === 'qris' ? 'text-sky-600' : 'text-slate-300'
+                        }`}
+                      />
+                    </button>
 
-                <button
-                  onClick={() => setPaymentMethod('bank_transfer')}
-                  className={`w-full p-3 rounded-2xl border flex items-center justify-between transition ${
+                    {paymentMethod === 'qris' && (
+                      <div className="px-3 pb-3.5 pt-1 border-t border-sky-100/80 bg-white/70 space-y-2 text-center">
+                        <p className="text-[11px] text-slate-600">
+                          Scan barcode QRIS apotek di bawah dengan aplikasi m-Banking atau e-Wallet pilihan Anda:
+                        </p>
+                        {storeSettings?.qris_image_url ? (
+                          <div className="py-2 flex flex-col items-center justify-center">
+                            <img
+                              src={storeSettings.qris_image_url}
+                              alt="Barcode QRIS Apotek"
+                              className="w-48 h-48 object-contain rounded-2xl bg-white p-2 border border-slate-200 shadow-sm"
+                            />
+                            <span className="text-[10px] font-bold text-slate-500 mt-1">
+                              {storeSettings.store_name || 'Apotek Jabat'} • QRIS Dinamis / Statis
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="py-4 px-3 bg-sky-50 rounded-2xl border border-sky-100 flex flex-col items-center text-center">
+                            <QrCode className="w-10 h-10 text-sky-600 mb-1" />
+                            <span className="text-xs font-bold text-sky-900">QRIS Resmi {storeSettings?.store_name || 'Apotek Jabat'}</span>
+                            <span className="text-[10px] text-slate-500 mt-0.5">Kode QRIS akan ditampilkan juga pada halaman instruksi pesanan setelah checkout.</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* 2. Bank Transfer Option (Supports Multiple Bank Accounts) */}
+                {isBankTransferAvailable && (
+                  <div className={`rounded-2xl border transition overflow-hidden ${
                     paymentMethod === 'bank_transfer'
-                      ? 'border-sky-600 bg-sky-50/40'
+                      ? 'border-sky-600 bg-sky-50/30'
                       : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700">
-                      BCA
-                    </div>
-                    <div className="text-left">
-                      <div className="text-xs font-bold text-slate-900">
-                        Transfer Bank Manual
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('bank_transfer')}
+                      className="w-full p-3 flex items-center justify-between transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-7 rounded-lg bg-emerald-100 border border-emerald-200 flex items-center justify-center font-bold text-[10px] text-emerald-800">
+                          BANK
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs font-bold text-slate-900">
+                            Transfer Bank Manual ({bankAccounts.length} Rekening)
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            {bankAccounts[0]?.bank_name || 'Transfer via m-Banking/ATM'}
+                          </div>
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        BCA 8830-1928-4411 (Apotek Sehat Mandiri)
-                      </div>
-                    </div>
-                  </div>
-                  <ShieldCheck
-                    className={`w-4 h-4 ${
-                      paymentMethod === 'bank_transfer' ? 'text-sky-600' : 'text-slate-300'
-                    }`}
-                  />
-                </button>
+                      <ShieldCheck
+                        className={`w-4 h-4 ${
+                          paymentMethod === 'bank_transfer' ? 'text-sky-600' : 'text-slate-300'
+                        }`}
+                      />
+                    </button>
 
-                <button
-                  onClick={() => setPaymentMethod('cod')}
-                  className={`w-full p-3 rounded-2xl border flex items-center justify-between transition ${
-                    paymentMethod === 'cod'
-                      ? 'border-sky-600 bg-sky-50/40'
-                      : 'border-slate-200 bg-white'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center font-bold text-[10px] text-slate-700">
-                      COD
-                    </div>
-                    <div className="text-left">
-                      <div className="text-xs font-bold text-slate-900">
-                        Bayar di Tempat (COD)
+                    {paymentMethod === 'bank_transfer' && (
+                      <div className="px-3 pb-3.5 pt-1 border-t border-sky-100/80 bg-white/70 space-y-2">
+                        <p className="text-[11px] text-slate-600">
+                          Silakan transfer nominal total pesanan ke salah satu rekening apotek berikut:
+                        </p>
+                        <div className="space-y-2 pt-1">
+                          {bankAccounts.map((acc, idx) => (
+                            <div
+                              key={acc.id || idx}
+                              className="p-3 bg-white rounded-xl border border-slate-200 shadow-xs flex items-center justify-between gap-2"
+                            >
+                              <div>
+                                <div className="text-xs font-extrabold text-slate-900 flex items-center gap-1.5">
+                                  <span className="px-1.5 py-0.5 bg-slate-100 rounded-md text-[10px] text-slate-700 font-bold border border-slate-200">
+                                    {acc.bank_name.split(' ')[0]}
+                                  </span>
+                                  <span>{acc.bank_name}</span>
+                                </div>
+                                <div className="text-xs font-mono font-bold text-sky-700 mt-1 select-all">
+                                  {acc.account_number}
+                                </div>
+                                <div className="text-[10px] text-slate-500 mt-0.5">
+                                  a.n. <span className="font-semibold text-slate-700">{acc.account_holder}</span>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleCopyAccount(acc.id || String(idx), acc.account_number)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition ${
+                                  copiedBankId === (acc.id || String(idx))
+                                    ? 'bg-emerald-600 text-white shadow-xs'
+                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {copiedBankId === (acc.id || String(idx)) ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Tersalin</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Copy className="w-3.5 h-3.5" />
+                                    <span>Salin</span>
+                                  </>
+                                )}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className="text-[10px] text-slate-500">
-                        Bayar tunai saat kurir apotek tiba di rumah
-                      </div>
-                    </div>
+                    )}
                   </div>
-                  <ShieldCheck
-                    className={`w-4 h-4 ${
-                      paymentMethod === 'cod' ? 'text-sky-600' : 'text-slate-300'
-                    }`}
-                  />
-                </button>
+                )}
+
+                {/* 3. COD Option */}
+                {isCodAvailable && (
+                  <div className={`rounded-2xl border transition overflow-hidden ${
+                    paymentMethod === 'cod'
+                      ? 'border-sky-600 bg-sky-50/30'
+                      : 'border-slate-200 bg-white'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cod')}
+                      className="w-full p-3 flex items-center justify-between transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-7 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center font-bold text-[10px] text-orange-800">
+                          COD
+                        </div>
+                        <div className="text-left">
+                          <div className="text-xs font-bold text-slate-900">
+                            Bayar di Tempat (COD)
+                          </div>
+                          <div className="text-[10px] text-slate-500">
+                            Bayar tunai saat kurir apotek tiba di rumah
+                          </div>
+                        </div>
+                      </div>
+                      <ShieldCheck
+                        className={`w-4 h-4 ${
+                          paymentMethod === 'cod' ? 'text-sky-600' : 'text-slate-300'
+                        }`}
+                      />
+                    </button>
+
+                    {paymentMethod === 'cod' && (
+                      <div className="px-3 pb-3.5 pt-1 border-t border-sky-100/80 bg-white/70">
+                        <p className="text-[11px] text-slate-600">
+                          💵 Siapkan uang pas saat kurir resmi apotek tiba di alamat Anda.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {!isQrisAvailable && !isBankTransferAvailable && !isCodAvailable && (
+                  <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-800 text-center">
+                    Metode pembayaran sedang tidak tersedia atau dinonaktifkan oleh apotek.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -710,12 +1081,19 @@ export default function CartPage() {
                 </span>
               </div>
 
-              {promoDiscount > 0 && (
-                <div className="flex justify-between text-xs text-emerald-600 font-medium">
-                  <span>Diskon Promo ({appliedPromo?.code})</span>
+              {appliedPromo && promoDiscount > 0 && (
+                <div className="flex justify-between text-xs text-emerald-600 font-bold bg-emerald-50/60 p-2 rounded-xl border border-emerald-200/70">
+                  <span>Diskon Voucher Promo ({appliedPromo.code})</span>
                   <span>-{formatRupiah(promoDiscount)}</span>
                 </div>
               )}
+              {appliedPromo && promoDiscount === 0 && (
+                <div className="flex justify-between text-xs text-amber-600 font-medium bg-amber-50/50 p-2 rounded-xl border border-amber-200/50">
+                  <span>Voucher ({appliedPromo.code})</span>
+                  <span className="text-[10px]">Min. belanja {formatRupiah(appliedPromo.min_order_amount)}</span>
+                </div>
+              )}
+
 
               <div className="flex justify-between text-xs text-slate-600">
                 <span className="flex items-center gap-1">
@@ -792,6 +1170,231 @@ export default function CartPage() {
         </div>
       )}
 
+      {/* Address Selection & Management Modal */}
+      {isAddressModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md bg-white rounded-3xl p-5 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-sky-600" />
+                <span>{isAddingAddress ? 'Tambah Alamat Baru' : 'Pilih Alamat Pengiriman'}</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsAddressModalOpen(false);
+                  setIsAddingAddress(false);
+                }}
+                className="p-1 rounded-full text-slate-400 hover:bg-slate-100"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {!isAddingAddress ? (
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingAddress(true)}
+                  className="w-full py-2.5 px-3 rounded-2xl border-2 border-dashed border-sky-300 text-sky-600 hover:bg-sky-50 text-xs font-bold flex items-center justify-center gap-1.5 transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tambah Alamat Baru</span>
+                </button>
+
+                {addresses.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-4">
+                    Belum ada alamat tersimpan. Silakan tambahkan alamat baru.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {addresses.map((addr) => {
+                      const isSelected = selectedAddress?.id === addr.id;
+                      return (
+                        <div
+                          key={addr.id}
+                          onClick={() => {
+                            setSelectedAddress(addr);
+                            setIsAddressModalOpen(false);
+                          }}
+                          className={`p-3.5 rounded-2xl border cursor-pointer transition text-left ${
+                            isSelected
+                              ? 'border-sky-600 bg-sky-50/50 shadow-xs'
+                              : 'border-slate-200 hover:border-slate-300 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-slate-900">
+                                {addr.label} – {addr.recipient_name}
+                              </span>
+                              {addr.is_primary && (
+                                <span className="px-1.5 py-0.2 rounded bg-sky-600 text-white text-[9px] font-bold">
+                                  Utama
+                                </span>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <Check className="w-4 h-4 text-sky-600" />
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-mono">
+                            {addr.phone}
+                          </div>
+                          <p className="text-xs text-slate-700 mt-1 leading-relaxed">
+                            {addr.address_line}
+                            {addr.subdistrict && `, ${addr.subdistrict}`}
+                            {addr.city && `, ${addr.city}`}
+                            {addr.postal_code && ` ${addr.postal_code}`}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Add New Address Form */
+              <form onSubmit={handleSaveNewAddress} className="space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Label Alamat
+                  </label>
+                  <div className="flex gap-2">
+                    {['Rumah', 'Kantor', 'Apartemen', 'Lainnya'].map((lbl) => (
+                      <button
+                        type="button"
+                        key={lbl}
+                        onClick={() => setNewLabel(lbl)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                          newLabel === lbl
+                            ? 'bg-sky-600 text-white border-sky-600'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {lbl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nama Penerima *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newRecipientName}
+                    onChange={(e) => setNewRecipientName(e.target.value)}
+                    placeholder="Contoh: Budi Santoso"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Nomor WhatsApp / Telepon *
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={newPhone}
+                    onChange={(e) => setNewPhone(e.target.value)}
+                    placeholder="0812-3456-7890"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Alamat Lengkap & Nomor Rumah *
+                  </label>
+                  <textarea
+                    rows={2}
+                    required
+                    value={newAddressLine}
+                    onChange={(e) => setNewAddressLine(e.target.value)}
+                    placeholder="Nama jalan, RT/RW, nomor rumah, blok..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Kecamatan / Kelurahan
+                    </label>
+                    <input
+                      type="text"
+                      value={newSubdistrict}
+                      onChange={(e) => setNewSubdistrict(e.target.value)}
+                      placeholder="Tebet Barat"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Kota
+                    </label>
+                    <input
+                      type="text"
+                      value={newCity}
+                      onChange={(e) => setNewCity(e.target.value)}
+                      placeholder="Jakarta Selatan"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Kode Pos
+                    </label>
+                    <input
+                      type="text"
+                      value={newPostalCode}
+                      onChange={(e) => setNewPostalCode(e.target.value)}
+                      placeholder="12810"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Patokan / Catatan
+                    </label>
+                    <input
+                      type="text"
+                      value={newNotes}
+                      onChange={(e) => setNewNotes(e.target.value)}
+                      placeholder="Pagar hitam..."
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsAddingAddress(false)}
+                    className="w-1/3 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs hover:bg-slate-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSavingAddress}
+                    className="w-2/3 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-xs disabled:opacity-50"
+                  >
+                    {isSavingAddress ? 'Menyimpan...' : 'Simpan Alamat'}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Promo Modal */}
       {isPromoModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
@@ -809,6 +1412,28 @@ export default function CartPage() {
             </div>
 
             <div className="space-y-2">
+              {appliedPromo && (
+                <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-emerald-800 font-mono">
+                      ✓ {appliedPromo.code} Aktif
+                    </span>
+                    <p className="text-[10px] text-emerald-700 mt-0.5">
+                      Potongan {formatRupiah(appliedPromo.discount_value)}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      removePromo();
+                      setIsPromoModalOpen(false);
+                    }}
+                    className="text-[10px] font-bold text-rose-600 hover:text-rose-700 px-2 py-1 bg-white rounded-lg border border-rose-200 shadow-2xs"
+                  >
+                    Lepas Voucher
+                  </button>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -839,30 +1464,49 @@ export default function CartPage() {
                   Tidak ada voucher yang dapat digunakan saat ini.
                 </p>
               ) : (
-                availablePromotions.map((p) => (
-                  <div
-                    key={p.id}
-                    className="p-3 rounded-2xl border border-dashed border-sky-300 bg-sky-50/50 flex items-center justify-between"
-                  >
-                    <div>
-                      <span className="text-xs font-extrabold text-sky-800 font-mono">
-                        {p.code}
-                      </span>
-                      <p className="text-[10px] text-slate-600 mt-0.5">{p.description}</p>
-                    </div>
-                    <button
-                      onClick={() => {
-                        applyPromo(p.code);
-                        setIsPromoModalOpen(false);
-                      }}
-                      className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white text-[10px] font-bold rounded-lg"
+                availablePromotions.map((p) => {
+                  const isCurrent = appliedPromo?.code === p.code;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-3 rounded-2xl border transition flex items-center justify-between ${
+                        isCurrent
+                          ? 'border-emerald-300 bg-emerald-50/50'
+                          : 'border-dashed border-sky-300 bg-sky-50/50'
+                      }`}
                     >
-                      Pakai
-                    </button>
-                  </div>
-                ))
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-extrabold text-sky-800 font-mono">
+                            {p.code}
+                          </span>
+                          {isCurrent && (
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-600 text-white text-[8px] font-bold">
+                              Dipakai
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-600 mt-0.5">{p.description}</p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          applyPromo(p.code);
+                          setIsPromoModalOpen(false);
+                        }}
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-lg ${
+                          isCurrent
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-sky-600 hover:bg-sky-700 text-white'
+                        }`}
+                      >
+                        {isCurrent ? 'Terpasang' : 'Pakai'}
+                      </button>
+                    </div>
+                  );
+                })
               )}
             </div>
+
           </div>
         </div>
       )}

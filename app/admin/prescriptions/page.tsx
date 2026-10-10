@@ -33,8 +33,8 @@ export default function AdminPrescriptionsPage() {
   const fetchPrescriptions = () => {
     setIsLoading(true);
     Promise.all([
-      fetch('/api/orders?role=admin').then((r) => r.json()),
-      fetch('/api/store').then((r) => r.json()),
+      fetch('/api/orders?role=admin', { cache: 'no-store' }).then((r) => r.json()),
+      fetch('/api/store', { cache: 'no-store' }).then((r) => r.json()),
     ])
       .then(([ordersJson, storeJson]) => {
         if (ordersJson.success && ordersJson.data) {

@@ -59,7 +59,7 @@ export const PharmacistConsultationCTA: React.FC = () => {
   const [store, setStore] = useState<StoreSettings | null>(null);
 
   useEffect(() => {
-    fetch('/api/store')
+    fetch('/api/store', { cache: 'no-store' })
       .then((r) => r.json())
       .then((json) => {
         if (json.success && json.data) setStore(json.data);
@@ -94,7 +94,7 @@ export const StoreInfoFooterCard: React.FC = () => {
   const [store, setStore] = useState<StoreSettings | null>(null);
 
   useEffect(() => {
-    fetch('/api/store')
+    fetch('/api/store', { cache: 'no-store' })
       .then((r) => r.json())
       .then((json) => {
         if (json.success && json.data) setStore(json.data);

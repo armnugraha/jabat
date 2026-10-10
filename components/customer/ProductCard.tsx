@@ -5,8 +5,12 @@ import Link from 'next/link';
 import { Product } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 import { useCart } from '@/lib/store/cart-context';
-import { Heart, Plus, ShieldCheck, Pill } from 'lucide-react';
+import { useWishlist } from '@/lib/store/wishlist-context';
+import { Heart, Plus, ShieldCheck, Pill, Check } from 'lucide-react';
 import { ProductVariantSelector } from './ProductVariantSelector';
+
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/lib/store/auth-context';
 
 interface ProductCardProps {
   product: Product;
@@ -15,29 +19,56 @@ interface ProductCardProps {
 
 export const ProductCard: React.FC<ProductCardProps> = ({
   product,
-  showFavorite = false,
+  showFavorite = true,
 }) => {
+  const router = useRouter();
+  const { user } = useAuth();
   const { addItem } = useCart();
-  const [isFavorite, setIsFavorite] = useState(false);
+  const { isInWishlist, toggleWishlist } = useWishlist();
   const [isVariantModalOpen, setIsVariantModalOpen] = useState(false);
+  const [justAdded, setJustAdded] = useState(false);
+
+  const isFavorite = isInWishlist(product.id) || (product.slug && isInWishlist(product.slug));
 
   const defaultVariant = product.variants[0] || {
+    id: 'default',
+    product_id: product.id,
     price: 0,
     unit: 'pcs',
     quantity_per_package: 1,
     name: 'Pcs',
+    stock: 0,
+    is_active: true,
   };
+
+  const isOutOfStock = defaultVariant.stock <= 0;
 
   const handlePlusClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
+    if (isOutOfStock) return;
+
     if (product.variants.length > 1) {
       setIsVariantModalOpen(true);
     } else {
       addItem(product, defaultVariant, 1);
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 1500);
     }
   };
+
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!user) {
+      alert('Silakan masuk ke akun Anda terlebih dahulu untuk menyimpan produk ke daftar favorit.');
+      router.push('/account');
+      return;
+    }
+    toggleWishlist(product);
+  };
+
 
   const hasDiscount =
     defaultVariant.strike_price && defaultVariant.strike_price > defaultVariant.price;
@@ -51,14 +82,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         wrapperClass: 'bg-rose-50 text-rose-700 border-rose-200/80',
       };
     }
-    if (product.category_id === 'c3') {
+    if (product.category_id === 'c3' || product.category?.slug === 'vitamin-suplemen') {
       return {
         label: 'Suplemen',
         dotClass: 'bg-blue-500',
         wrapperClass: 'bg-blue-50 text-blue-700 border-blue-200/80',
       };
     }
-    if (product.category_id === 'c5') {
+    if (product.category_id === 'c5' || product.category?.slug === 'alat-kesehatan') {
       return {
         label: 'Alkes',
         dotClass: 'bg-indigo-500',
@@ -95,17 +126,13 @@ export const ProductCard: React.FC<ProductCardProps> = ({
 
           {showFavorite && (
             <button
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setIsFavorite(!isFavorite);
-              }}
-              className="p-1 text-slate-400 hover:text-rose-500 transition"
+              onClick={handleFavoriteClick}
+              className="p-1 text-slate-300 hover:text-rose-500 transition rounded-full hover:bg-rose-50/50"
               aria-label="Simpan Favorit"
             >
               <Heart
-                className={`w-4 h-4 ${
-                  isFavorite ? 'fill-rose-500 text-rose-500' : ''
+                className={`w-4 h-4 transition ${
+                  isFavorite ? 'fill-rose-500 text-rose-500 scale-110' : ''
                 }`}
               />
             </button>
@@ -132,6 +159,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({
             <div className="absolute bottom-1.5 left-1.5 bg-white/90 backdrop-blur-xs px-2 py-0.5 rounded-md text-[9px] font-semibold text-slate-600 border border-slate-200/60 uppercase">
               {defaultVariant.name} @ {defaultVariant.quantity_per_package} {defaultVariant.unit}
             </div>
+
+            {isOutOfStock && (
+              <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[1px] flex items-center justify-center">
+                <span className="px-2.5 py-1 bg-white/95 text-slate-800 text-[10px] font-bold rounded-lg shadow-sm">
+                  Stok Habis
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Product Titles */}
@@ -161,11 +196,28 @@ export const ProductCard: React.FC<ProductCardProps> = ({
           {/* Solid Blue Add Button */}
           <button
             onClick={handlePlusClick}
-            className="w-8 h-8 rounded-full bg-sky-600 hover:bg-sky-700 active:scale-95 text-white flex items-center justify-center shadow-sm shadow-sky-600/30 transition duration-150"
+            disabled={isOutOfStock}
+            className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition duration-150 active:scale-95 ${
+              isOutOfStock
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : justAdded
+                ? 'bg-emerald-600 text-white shadow-emerald-600/30'
+                : 'bg-sky-600 hover:bg-sky-700 text-white shadow-sky-600/30'
+            }`}
             aria-label="Tambah ke keranjang"
-            title={product.variants.length > 1 ? 'Pilih Kemasan' : 'Tambah ke Keranjang'}
+            title={
+              isOutOfStock
+                ? 'Stok habis'
+                : product.variants.length > 1
+                ? 'Pilih Kemasan'
+                : 'Tambah ke Keranjang'
+            }
           >
-            <Plus className="w-4.5 h-4.5 stroke-[2.5]" />
+            {justAdded ? (
+              <Check className="w-4 h-4 stroke-[2.5]" />
+            ) : (
+              <Plus className="w-4.5 h-4.5 stroke-[2.5]" />
+            )}
           </button>
         </div>
       </div>

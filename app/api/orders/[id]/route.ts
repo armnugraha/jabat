@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
 export async function GET(
   request: Request,
@@ -10,6 +11,7 @@ export async function GET(
 
     if (isSupabaseConfigured()) {
       try {
+        const supabase = await getSupabaseAdminClient();
         const { data, error } = await supabase
           .from('orders')
           .select(`
@@ -54,6 +56,7 @@ export async function PUT(
     if (paymentStatus) updates.payment_status = paymentStatus;
 
     if (isSupabaseConfigured()) {
+      const supabase = await getSupabaseAdminClient();
       await supabase
         .from('orders')
         .update(updates)
@@ -72,3 +75,4 @@ export async function PUT(
     );
   }
 }
+

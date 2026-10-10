@@ -211,6 +211,13 @@ export default function AdminProductsPage() {
                   <td className="py-3.5 px-4 text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <Link
+                        href={`/admin/products/${p.id}/edit`}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-amber-600 hover:bg-amber-50"
+                        title="Edit Obat & Kemasan"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </Link>
+                      <Link
                         href={`/products/${p.slug || p.id}`}
                         className="p-1.5 rounded-lg text-slate-500 hover:text-sky-600 hover:bg-sky-50"
                         title="Lihat Halaman Produk"
@@ -300,6 +307,13 @@ export default function AdminProductsPage() {
               </button>
 
               <div className="flex items-center gap-2">
+                <Link
+                  href={`/admin/products/${p.id}/edit`}
+                  className="p-1.5 text-amber-600 hover:bg-amber-50 rounded-xl"
+                  title="Edit Obat"
+                >
+                  <Edit className="w-4 h-4" />
+                </Link>
                 <button
                   onClick={() => deleteProduct(p.id)}
                   className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-xl"

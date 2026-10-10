@@ -1,24 +1,38 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+export const fetchCache = 'force-no-store';
 
-let userCartStorage: Record<string, any[]> = {};
+const noCacheHeaders = {
+  'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  Pragma: 'no-cache',
+  Expires: '0',
+};
+
+// Global singleton cache across Next.js worker threads and hot-reloads
+declare global {
+  var __jabat_cart_storage: Record<string, any[]> | undefined;
+}
+
+const userCartStorage: Record<string, any[]> =
+  globalThis.__jabat_cart_storage || (globalThis.__jabat_cart_storage = {});
 
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
-
-    if (!userId) {
-      return NextResponse.json({ success: true, data: [] });
-    }
+    const userId = searchParams.get('userId') || 'guest';
 
     const items = userCartStorage[userId] || [];
-    return NextResponse.json({ success: true, data: items });
+    return NextResponse.json(
+      { success: true, data: items, count: items.length },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || 'Gagal mengambil data keranjang.' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }
@@ -26,26 +40,24 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { userId, items } = body;
+    const { userId = 'guest', items } = body;
 
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'userId wajib disertakan.' },
-        { status: 400 }
-      );
-    }
+    const validatedItems = Array.isArray(items) ? items : [];
+    userCartStorage[userId] = validatedItems;
 
-    userCartStorage[userId] = items || [];
-
-    return NextResponse.json({
-      success: true,
-      data: userCartStorage[userId],
-      message: 'Keranjang berhasil diperbarui.',
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: userCartStorage[userId],
+        count: validatedItems.length,
+        message: 'Keranjang berhasil diperbarui.',
+      },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || 'Gagal menyimpan keranjang.' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }
@@ -53,17 +65,19 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const userId = searchParams.get('userId');
+    const userId = searchParams.get('userId') || 'guest';
 
-    if (userId && userCartStorage[userId]) {
-      delete userCartStorage[userId];
-    }
+    userCartStorage[userId] = [];
 
-    return NextResponse.json({ success: true, message: 'Keranjang dikosongkan.' });
+    return NextResponse.json(
+      { success: true, message: 'Keranjang dikosongkan.', data: [] },
+      { headers: noCacheHeaders }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || 'Gagal mengosongkan keranjang.' },
-      { status: 500 }
+      { status: 500, headers: noCacheHeaders }
     );
   }
 }
+

@@ -1,11 +1,14 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, ProductVariant, CartItem, DeliveryOption, PaymentMethod, Promotion } from '../types';
-import { mockPromotions } from '../data/mock-data';
+import { Product, ProductVariant, CartItem, DeliveryOption, PaymentMethod, Promotion, StoreSettings } from '../types';
+import { mockPromotions, mockStoreSettings } from '../data/mock-data';
+
+import { useAuth } from './auth-context';
 
 interface CartContextType {
   items: CartItem[];
+  isLoaded: boolean;
   addItem: (product: Product, variant: ProductVariant, quantity?: number) => void;
   updateQuantity: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
@@ -33,66 +36,90 @@ interface CartContextType {
   setPrescriptionFile: (file: File | null) => void;
   hasPrescriptionItems: boolean;
   total: number;
+  storeSettings: StoreSettings;
+  availablePromotions: Promotion[];
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isLoading: isAuthLoading } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(mockStoreSettings);
+  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>(mockPromotions);
+  const lastLoadedUserIdRef = React.useRef<string | null>(null);
 
-  // Load cart from localStorage / API on mount
+  // Load store settings & promotions from API
   useEffect(() => {
-    try {
-      const savedAuth = localStorage.getItem('asm_auth_user');
-      const userId = savedAuth ? JSON.parse(savedAuth)?.id : null;
-      const cartKey = userId ? `asm_cart_${userId}` : 'asm_cart_guest';
+    fetch('/api/store', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          setStoreSettings(json.data);
+        }
+      })
+      .catch((err) => console.warn('Store settings sync notice:', err));
 
-      const localCart = localStorage.getItem(cartKey);
-      if (localCart) {
-        setItems(JSON.parse(localCart));
-      }
-
-      if (userId) {
-        fetch(`/api/cart?userId=${userId}`)
-          .then((res) => res.json())
-          .then((json) => {
-            if (json.success && json.data && json.data.length > 0) {
-              setItems(json.data);
-            }
-          })
-          .catch((err) => console.warn('Cart sync notice:', err));
-      }
-    } catch (e) {
-      console.error('Cart load error:', e);
-    } finally {
-      setIsLoaded(true);
-    }
+    fetch('/api/promotions', { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data && json.data.length > 0) {
+          setAvailablePromotions(json.data);
+        }
+      })
+      .catch((err) => console.warn('Promotions sync notice:', err));
   }, []);
 
-  // Save cart to localStorage & API whenever items change
+  // Load cart from API on mount or when auth state is resolved
   useEffect(() => {
-    if (!isLoaded) return;
-    try {
-      const savedAuth = localStorage.getItem('asm_auth_user');
-      const userId = savedAuth ? JSON.parse(savedAuth)?.id : null;
-      const cartKey = userId ? `asm_cart_${userId}` : 'asm_cart_guest';
+    if (isAuthLoading) return;
 
-      localStorage.setItem(cartKey, JSON.stringify(items));
+    const currentUserId = user?.id || 'guest';
+    let isCancelled = false;
+    setIsLoaded(false);
 
-      if (userId) {
-        fetch('/api/cart', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId, items }),
-        }).catch((err) => console.warn('Cart post notice:', err));
-      }
-    } catch (e) {
-      console.error('Cart save error:', e);
-    }
-  }, [items, isLoaded]);
+    fetch(`/api/cart?userId=${encodeURIComponent(currentUserId)}`, { cache: 'no-store' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (isCancelled) return;
+        if (json.success && Array.isArray(json.data)) {
+          setItems(json.data);
+        } else {
+          setItems([]);
+        }
+        lastLoadedUserIdRef.current = currentUserId;
+        setIsLoaded(true);
+      })
+      .catch((err) => {
+        console.warn('Cart sync notice:', err);
+        if (!isCancelled) {
+          lastLoadedUserIdRef.current = currentUserId;
+          setIsLoaded(true);
+        }
+      });
 
-  const [appliedPromo, setAppliedPromo] = useState<Promotion | null>(mockPromotions[0]); // Default HEMATSEHAT as in design
+    return () => {
+      isCancelled = true;
+    };
+  }, [user?.id, isAuthLoading]);
+
+  // Save cart to API ONLY after loading has completed for the active user
+  useEffect(() => {
+    if (!isLoaded || isAuthLoading) return;
+    const currentUserId = user?.id || 'guest';
+
+    // Prevent saving if the user context hasn't finished loading yet
+    if (lastLoadedUserIdRef.current !== currentUserId) return;
+
+    fetch('/api/cart', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: currentUserId, items }),
+    }).catch((err) => console.warn('Cart post notice:', err));
+  }, [items, isLoaded, isAuthLoading, user?.id]);
+
+  const [appliedPromo, setAppliedPromo] = useState<Promotion | null>(null);
   const [deliveryOption, setDeliveryOption] = useState<DeliveryOption>('express');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('qris');
   const [customerNotes, setCustomerNotes] = useState('Mohon sertakan plastik klip kedap udara & struk resmi farmasi');
@@ -172,26 +199,33 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const productDiscountTotal = grossProductTotal - subtotal;
 
-  // Delivery fee logic
+  // Dynamic Delivery Fee Calculation from Store Settings
+  const expressFee = storeSettings.express_delivery_fee ?? 10000;
+  const regularFee = storeSettings.regular_delivery_fee ?? 15000;
+  const freeThreshold = storeSettings.free_delivery_threshold ?? 100000;
+
   const deliveryFee =
     deliveryOption === 'pickup'
       ? 0
       : deliveryOption === 'express'
-      ? 10000
-      : 15000;
+      ? subtotal >= freeThreshold && subtotal > 0
+        ? 0
+        : expressFee
+      : regularFee;
 
-  // Promo code calculation
+  // Promo code calculation against dynamic available promotions
   const applyPromo = (code: string) => {
-    const found = mockPromotions.find(
-      (p) => p.code.toUpperCase() === code.trim().toUpperCase() && p.is_active
+    const cleanCode = code.trim().toUpperCase();
+    const found = availablePromotions.find(
+      (p) => p.code.toUpperCase() === cleanCode && (p.is_active !== false)
     );
     if (!found) {
-      return { success: false, message: 'Kode voucher tidak valid atau sudah kedaluwarsa' };
+      return { success: false, message: 'Kode voucher tidak valid atau sudah tidak aktif' };
     }
-    if (subtotal < found.min_order_amount) {
+    if (subtotal < (found.min_order_amount || 0)) {
       return {
         success: false,
-        message: `Minimal belanja Rp ${found.min_order_amount.toLocaleString('id-ID')} untuk menggunakan voucher ini`,
+        message: `Minimal belanja Rp ${(found.min_order_amount || 0).toLocaleString('id-ID')} untuk menggunakan voucher ini`,
       };
     }
     setAppliedPromo(found);
@@ -202,7 +236,16 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAppliedPromo(null);
   };
 
-  const promoDiscount = appliedPromo && subtotal >= appliedPromo.min_order_amount ? appliedPromo.discount_value : 0;
+  const promoDiscount =
+    appliedPromo && subtotal >= (appliedPromo.min_order_amount || 0)
+      ? appliedPromo.discount_type === 'percentage'
+        ? Math.min(
+            Math.round((subtotal * appliedPromo.discount_value) / 100),
+            appliedPromo.max_discount || Infinity
+          )
+        : appliedPromo.discount_value
+      : 0;
+
 
   const hasPrescriptionItems = selectedItems.some(
     (item) => item.product.requires_prescription
@@ -214,6 +257,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     <CartContext.Provider
       value={{
         items,
+        isLoaded,
         addItem,
         updateQuantity,
         removeItem,
@@ -241,6 +285,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setPrescriptionFile,
         hasPrescriptionItems,
         total,
+        storeSettings,
+        availablePromotions,
       }}
     >
       {children}
@@ -255,3 +301,4 @@ export const useCart = () => {
   }
   return context;
 };
+

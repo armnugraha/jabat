@@ -48,3 +48,43 @@ export function getOrderStatusBadge(status: string) {
       return { label: status, color: 'bg-slate-100 text-slate-700 border-slate-200' };
   }
 }
+
+export function isStoreOpenNow(store?: { is_open?: boolean; opening_time?: string; closing_time?: string }): {
+  isOpen: boolean;
+  statusText: string;
+} {
+  if (!store || store.is_open === false) {
+    return { isOpen: false, statusText: 'Tutup' };
+  }
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const parseTime = (timeStr?: string, defaultVal = 0) => {
+    if (!timeStr) return defaultVal;
+    const parts = timeStr.replace('.', ':').split(':').map((n) => parseInt(n, 10));
+    if (isNaN(parts[0])) return defaultVal;
+    return parts[0] * 60 + (parts[1] || 0);
+  };
+
+  const openMinutes = parseTime(store.opening_time, 8 * 60);
+  const closeMinutes = parseTime(store.closing_time, 21 * 60);
+
+  let isOpen = false;
+  if (closeMinutes > openMinutes) {
+    // Normal daytime e.g. 08:00 - 21:00
+    isOpen = currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+  } else {
+    // Overnight e.g. 20:00 - 06:00
+    isOpen = currentMinutes >= openMinutes || currentMinutes < closeMinutes;
+  }
+
+  const formattedClose = store.closing_time ? store.closing_time.replace(':', '.') : '21.00';
+  const formattedOpen = store.opening_time ? store.opening_time.replace(':', '.') : '08.00';
+
+  return {
+    isOpen,
+    statusText: isOpen ? `Buka • Tutup ${formattedClose}` : `Tutup • Buka ${formattedOpen}`,
+  };
+}
+

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,7 @@ export async function GET(request: Request) {
 
     if (isSupabaseConfigured()) {
       try {
+        const supabase = await getSupabaseAdminClient();
         let query = supabase
           .from('orders')
           .select(`
@@ -137,6 +139,7 @@ export async function POST(request: Request) {
     // Also attempt inserting into Supabase database
     if (isSupabaseConfigured()) {
       try {
+        const supabase = await getSupabaseAdminClient();
         const { data: dbOrder, error: orderErr } = await supabase
           .from('orders')
           .insert({

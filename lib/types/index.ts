@@ -213,6 +213,13 @@ export interface Conversation {
   unread_count: number;
 }
 
+export interface BankAccount {
+  id: string;
+  bank_name: string;
+  account_number: string;
+  account_holder: string;
+}
+
 export interface StoreSettings {
   id: string;
   store_name: string;
@@ -235,8 +242,11 @@ export interface StoreSettings {
   bank_name: string;
   bank_account_number: string;
   bank_account_holder: string;
+  bank_accounts?: BankAccount[];
   qris_enabled: boolean;
   qris_image_url?: string;
   cod_enabled: boolean;
   min_order_amount: number;
+  created_at?: string;
+  updated_at?: string;
 }

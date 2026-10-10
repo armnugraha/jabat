@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { CartProvider } from '@/lib/store/cart-context';
 import { AuthProvider } from '@/lib/store/auth-context';
+import { WishlistProvider } from '@/lib/store/wishlist-context';
 
 export const metadata: Metadata = {
   title: 'Apotek Sehat Mandiri - Farmasi Digital Resmi & Terpercaya',
@@ -27,9 +28,11 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen bg-slate-50 text-slate-900 selection:bg-sky-500 selection:text-white antialiased">
         <AuthProvider>
-          <CartProvider>
-            {children}
-          </CartProvider>
+          <WishlistProvider>
+            <CartProvider>
+              {children}
+            </CartProvider>
+          </WishlistProvider>
         </AuthProvider>
       </body>
     </html>

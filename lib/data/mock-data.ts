@@ -21,6 +21,20 @@ export const mockStoreSettings: StoreSettings = {
   bank_name: 'Bank Central Asia (BCA)',
   bank_account_number: '8830-1928-4411',
   bank_account_holder: 'Apotek Sehat Mandiri',
+  bank_accounts: [
+    {
+      id: 'bca-1',
+      bank_name: 'Bank Central Asia (BCA)',
+      account_number: '8830-1928-4411',
+      account_holder: 'Apotek Sehat Mandiri',
+    },
+    {
+      id: 'mandiri-1',
+      bank_name: 'Bank Mandiri',
+      account_number: '137-00-1928374-1',
+      account_holder: 'Apotek Sehat Mandiri',
+    },
+  ],
   qris_enabled: true,
   cod_enabled: true,
   min_order_amount: 10000,
