@@ -62,6 +62,9 @@ CREATE TABLE IF NOT EXISTS profiles (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Unique constraint index for profile phone numbers
+CREATE UNIQUE INDEX IF NOT EXISTS profiles_phone_key ON profiles (phone) WHERE phone IS NOT NULL AND phone != '';
+
 -- 4. Categories Table
 CREATE TABLE IF NOT EXISTS categories (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -447,6 +450,42 @@ ON store_settings FOR SELECT USING (true);
 
 CREATE POLICY "Admin can update store settings"
 ON store_settings FOR ALL TO authenticated USING (is_admin());
+
+-- ==============================================================================
+-- CART ITEMS TABLE & POLICIES
+-- ==============================================================================
+CREATE TABLE IF NOT EXISTS cart_items (
+    id TEXT PRIMARY KEY,
+    user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+    variant_id UUID REFERENCES product_variants(id) ON DELETE CASCADE,
+    quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
+    selected BOOLEAN NOT NULL DEFAULT TRUE,
+    item_data JSONB NOT NULL DEFAULT '{}'::jsonb,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_cart_items_user ON cart_items(user_id);
+
+DROP TRIGGER IF EXISTS trigger_cart_items_updated_at ON cart_items;
+CREATE TRIGGER trigger_cart_items_updated_at
+BEFORE UPDATE ON cart_items
+FOR EACH ROW EXECUTE FUNCTION update_timestamp();
+
+ALTER TABLE cart_items ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Users can manage own cart items" ON cart_items;
+CREATE POLICY "Users can manage own cart items"
+ON cart_items FOR ALL TO authenticated
+USING (user_id = auth.uid())
+WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "Staff can view all cart items" ON cart_items;
+CREATE POLICY "Staff can view all cart items"
+ON cart_items FOR SELECT TO authenticated
+USING (is_staff());
+
 
 -- ==============================================================================
 -- STORAGE BUCKETS CONFIGURATION (To be created via Supabase dashboard / API)

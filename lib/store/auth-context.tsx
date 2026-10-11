@@ -224,7 +224,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   ) => {
     setIsLoading(true);
     try {
-      const cleanInput = emailOrPhone.trim();
+      const cleanInput = emailOrPhone.trim().toLowerCase();
       if (!cleanInput) {
         return { success: false, error: 'Email atau Nomor WhatsApp wajib diisi.' };
       }

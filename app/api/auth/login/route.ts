@@ -36,18 +36,30 @@ export async function POST(request: Request) {
 
     // If identifier is not an email (e.g. phone number like 081234567890), lookup profile email
     if (!cleanIdentifier.includes('@')) {
+      const phoneDigits = cleanIdentifier.replace(/\D/g, '');
+      const localPhone = phoneDigits.startsWith('62') ? '0' + phoneDigits.slice(2) : phoneDigits;
+      const intlPhone = phoneDigits.startsWith('0') ? '62' + phoneDigits.slice(1) : phoneDigits;
+      const phoneVariants = Array.from(new Set([
+        cleanIdentifier,
+        phoneDigits,
+        localPhone,
+        intlPhone,
+        `+${intlPhone}`,
+      ].filter(Boolean)));
+
       const { data: profileWithPhone } = await supabase
         .from('profiles')
         .select('id, phone')
-        .eq('phone', cleanIdentifier)
+        .in('phone', phoneVariants)
+        .limit(1)
         .maybeSingle();
 
       if (profileWithPhone) {
         // Map known seeded default users or custom users if available
-        if (cleanIdentifier === '081234567890') emailToAuth = 'pasien@jabat.id';
-        else if (cleanIdentifier === '081298765432') emailToAuth = 'apoteker@jabat.id';
-        else if (cleanIdentifier === '081122334455') emailToAuth = 'admin@jabat.id';
-        else emailToAuth = `${cleanIdentifier}@phone.jabat.id`;
+        if (phoneDigits === '081234567890' || cleanIdentifier === '081234567890') emailToAuth = 'pasien@jabat.id';
+        else if (phoneDigits === '081298765432' || cleanIdentifier === '081298765432') emailToAuth = 'apoteker@jabat.id';
+        else if (phoneDigits === '081122334455' || cleanIdentifier === '081122334455') emailToAuth = 'admin@jabat.id';
+        else emailToAuth = `${phoneDigits || cleanIdentifier}@phone.jabat.id`;
       }
     }
 

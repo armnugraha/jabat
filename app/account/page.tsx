@@ -123,7 +123,7 @@ function AccountContent() {
     setAuthError('');
     setIsSubmitting(true);
 
-    const res = await login(identifier, password);
+    const res = await login(identifier.trim().toLowerCase(), password);
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -136,9 +136,32 @@ function AccountContent() {
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError('');
+
+    if (!fullName.trim()) {
+      setAuthError('Nama lengkap pasien wajib diisi.');
+      return;
+    }
+
+    const cleanPhone = regPhone.trim();
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (!cleanPhone || phoneDigits.length < 8) {
+      setAuthError('Nomor WhatsApp / telepon tidak valid (minimal 8-10 digit).');
+      return;
+    }
+
+    if (!regEmail.trim()) {
+      setAuthError('Alamat email wajib diisi.');
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setAuthError('Kata sandi minimal 6 karakter.');
+      return;
+    }
+
     setIsSubmitting(true);
 
-    const res = await register(fullName, regPhone, regEmail, password);
+    const res = await register(fullName.trim(), cleanPhone, regEmail.trim().toLowerCase(), password);
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -475,6 +498,10 @@ function AccountContent() {
                         required
                         value={regPhone}
                         onChange={(e) => setRegPhone(e.target.value)}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        inputMode="tel"
                         placeholder="0812-3456-7890"
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                       />
@@ -491,9 +518,12 @@ function AccountContent() {
                         type="email"
                         required
                         value={regEmail}
-                        onChange={(e) => setRegEmail(e.target.value)}
+                        onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
                         placeholder="email@anda.com"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs lowercase focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                       />
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                     </div>
@@ -509,9 +539,12 @@ function AccountContent() {
                       type="text"
                       required
                       value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
+                      onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
                       placeholder="email@anda.com atau 0812-3456-7890"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs lowercase focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                     />
                     <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   </div>

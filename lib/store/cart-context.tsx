@@ -79,15 +79,57 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isCancelled = false;
     setIsLoaded(false);
 
+    // If guest, load from localStorage
+    if (currentUserId === 'guest') {
+      try {
+        const saved = localStorage.getItem('jabat_guest_cart');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            setItems(parsed);
+          }
+        }
+      } catch (e) {}
+      lastLoadedUserIdRef.current = 'guest';
+      setIsLoaded(true);
+      return;
+    }
+
+    // Authenticated user: Load from Supabase via API
     fetch(`/api/cart?userId=${encodeURIComponent(currentUserId)}`, { cache: 'no-store' })
       .then((res) => res.json())
       .then((json) => {
         if (isCancelled) return;
-        if (json.success && Array.isArray(json.data)) {
-          setItems(json.data);
-        } else {
-          setItems([]);
-        }
+        let serverItems: CartItem[] = json.success && Array.isArray(json.data) ? json.data : [];
+
+        // Check if there was guest cart in localStorage to merge into Supabase
+        try {
+          const guestSaved = localStorage.getItem('jabat_guest_cart');
+          if (guestSaved) {
+            const guestItems = JSON.parse(guestSaved);
+            if (Array.isArray(guestItems) && guestItems.length > 0) {
+              const merged = [...serverItems];
+              for (const gItem of guestItems) {
+                const idx = merged.findIndex((m) => m.id === gItem.id);
+                if (idx >= 0) {
+                  merged[idx].quantity += gItem.quantity;
+                } else {
+                  merged.push(gItem);
+                }
+              }
+              serverItems = merged;
+              localStorage.removeItem('jabat_guest_cart');
+              // Sync merged items to Supabase
+              fetch('/api/cart', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUserId, items: serverItems }),
+              }).catch(() => {});
+            }
+          }
+        } catch (e) {}
+
+        setItems(serverItems);
         lastLoadedUserIdRef.current = currentUserId;
         setIsLoaded(true);
       })
@@ -112,6 +154,14 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Prevent saving if the user context hasn't finished loading yet
     if (lastLoadedUserIdRef.current !== currentUserId) return;
 
+    if (currentUserId === 'guest') {
+      try {
+        localStorage.setItem('jabat_guest_cart', JSON.stringify(items));
+      } catch (e) {}
+      return;
+    }
+
+    // Save to Supabase via API
     fetch('/api/cart', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -180,6 +230,15 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearCart = () => {
     setItems([]);
+    if (!user) {
+      try {
+        localStorage.removeItem('jabat_guest_cart');
+      } catch (e) {}
+    } else {
+      fetch(`/api/cart?userId=${encodeURIComponent(user.id)}`, {
+        method: 'DELETE',
+      }).catch(() => {});
+    }
   };
 
   const selectedItems = items.filter((item) => item.selected);

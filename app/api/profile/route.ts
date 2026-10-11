@@ -73,6 +73,36 @@ export async function PUT(request: Request) {
     if (isSupabaseConfigured()) {
       const adminClient = await getSupabaseAdminClient();
 
+      if (phone !== undefined && phone !== null && phone.trim()) {
+        const cleanPhone = phone.trim();
+        const phoneDigits = cleanPhone.replace(/\D/g, '');
+        const localPhone = phoneDigits.startsWith('62') ? '0' + phoneDigits.slice(2) : phoneDigits;
+        const intlPhone = phoneDigits.startsWith('0') ? '62' + phoneDigits.slice(1) : phoneDigits;
+        const phoneVariants = Array.from(new Set([
+          cleanPhone,
+          phoneDigits,
+          localPhone,
+          intlPhone,
+          `+${intlPhone}`,
+          localPhone.length >= 10 ? `${localPhone.slice(0, 4)}-${localPhone.slice(4, 8)}-${localPhone.slice(8)}` : '',
+        ].filter(Boolean)));
+
+        const { data: duplicateProfile } = await adminClient
+          .from('profiles')
+          .select('id')
+          .neq('id', userId)
+          .in('phone', phoneVariants)
+          .limit(1)
+          .maybeSingle();
+
+        if (duplicateProfile) {
+          return NextResponse.json(
+            { success: false, error: 'Nomor WhatsApp / telepon ini sudah digunakan oleh akun lain.' },
+            { status: 409, headers: noCacheHeaders }
+          );
+        }
+      }
+
       const updatePayload: Record<string, any> = {
         updated_at: new Date().toISOString(),
       };

@@ -39,7 +39,7 @@ export const AuthRequiredCard: React.FC<AuthRequiredCardProps> = ({
     setAuthError('');
     setIsSubmitting(true);
 
-    const res = await login(identifier, password, 'customer');
+    const res = await login(identifier.trim().toLowerCase(), password, 'customer');
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -52,10 +52,11 @@ export const AuthRequiredCard: React.FC<AuthRequiredCardProps> = ({
     setAuthError('');
     setIsSubmitting(true);
 
-    const email = identifier.includes('@')
-      ? identifier
-      : `${identifier}@pasien.apoteksehatmandiri.com`;
-    const res = await register(fullName, identifier, email, password);
+    const cleanInput = identifier.trim().toLowerCase();
+    const email = cleanInput.includes('@')
+      ? cleanInput
+      : `${cleanInput.replace(/\D/g, '') || cleanInput}@pasien.apoteksehatmandiri.com`;
+    const res = await register(fullName, cleanInput, email, password);
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -153,9 +154,12 @@ export const AuthRequiredCard: React.FC<AuthRequiredCardProps> = ({
               type="text"
               required
               value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
+              onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder="0812-3456-7890 atau email@anda.com"
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs lowercase focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
             />
             <Phone className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
           </div>

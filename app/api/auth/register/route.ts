@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
 
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
+
 export const dynamic = 'force-dynamic';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mock-pharmacy.supabase.co';
@@ -24,11 +26,81 @@ export async function POST(request: Request) {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password?.trim() || 'Apotek123!';
 
+    const phoneDigits = cleanPhone.replace(/\D/g, '');
+    if (phoneDigits.length < 8) {
+      return NextResponse.json(
+        { success: false, error: 'Nomor telepon/WhatsApp tidak valid (minimal 8-10 digit).' },
+        { status: 400 }
+      );
+    }
+
     let userId = `user-${Date.now()}`;
     let registeredUser = null;
     let authSession = null;
 
     if (isSupabaseConfigured()) {
+      const adminClient = await getSupabaseAdminClient();
+      const dbClient = adminClient || supabase;
+
+      // 1. Check if phone number is already registered in profiles
+      const localPhone = phoneDigits.startsWith('62') ? '0' + phoneDigits.slice(2) : phoneDigits;
+      const intlPhone = phoneDigits.startsWith('0') ? '62' + phoneDigits.slice(1) : phoneDigits;
+
+      const phoneVariants = Array.from(new Set([
+        cleanPhone,
+        phoneDigits,
+        localPhone,
+        intlPhone,
+        `+${intlPhone}`,
+        localPhone.length >= 10 ? `${localPhone.slice(0, 4)}-${localPhone.slice(4, 8)}-${localPhone.slice(8)}` : '',
+        localPhone.length >= 10 ? `${localPhone.slice(0, 4)} ${localPhone.slice(4, 8)} ${localPhone.slice(8)}` : '',
+      ].filter(Boolean)));
+
+      const { data: existingProfile } = await dbClient
+        .from('profiles')
+        .select('id, phone')
+        .in('phone', phoneVariants)
+        .limit(1)
+        .maybeSingle();
+
+      if (existingProfile) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Nomor WhatsApp / telepon ini sudah terdaftar. Silakan gunakan nomor lain atau langsung masuk ke akun Anda.',
+          },
+          { status: 409 }
+        );
+      }
+
+      // Check with subscriber suffix if digits >= 8
+      if (phoneDigits.length >= 8) {
+        const subscriberSuffix = phoneDigits.slice(-8);
+        const { data: suffixMatches } = await dbClient
+          .from('profiles')
+          .select('id, phone')
+          .ilike('phone', `%${subscriberSuffix}%`);
+
+        if (suffixMatches && suffixMatches.length > 0) {
+          const isTaken = suffixMatches.some((p: any) => {
+            if (!p.phone) return false;
+            const pDigits = p.phone.replace(/\D/g, '');
+            const pLocal = pDigits.startsWith('62') ? '0' + pDigits.slice(2) : pDigits;
+            return pLocal === localPhone || pDigits === phoneDigits;
+          });
+
+          if (isTaken) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Nomor WhatsApp / telepon ini sudah terdaftar. Silakan gunakan nomor lain atau langsung masuk ke akun Anda.',
+              },
+              { status: 409 }
+            );
+          }
+        }
+      }
+
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: cleanPassword,
@@ -68,9 +140,9 @@ export async function POST(request: Request) {
             ? createClient(supabaseUrl, supabaseAnonKey, {
                 global: { headers: { Authorization: `Bearer ${data.session.access_token}` } },
               })
-            : supabase;
+            : (adminClient || supabase);
 
-          await clientToUse.from('profiles').upsert({
+          const { error: upsertError } = await clientToUse.from('profiles').upsert({
             id: userId,
             full_name: cleanName,
             phone: cleanPhone,
@@ -78,8 +150,38 @@ export async function POST(request: Request) {
             avatar_url: null,
             updated_at: new Date().toISOString(),
           });
-        } catch (dbErr) {
-          console.warn('Profile upsert notice:', dbErr);
+
+          if (upsertError) {
+            console.warn('Profile upsert notice:', upsertError);
+            if (
+              upsertError.message.toLowerCase().includes('unique') ||
+              upsertError.message.toLowerCase().includes('duplicate') ||
+              upsertError.code === '23505'
+            ) {
+              return NextResponse.json(
+                {
+                  success: false,
+                  error: 'Nomor WhatsApp / telepon ini sudah terdaftar. Silakan gunakan nomor lain.',
+                },
+                { status: 409 }
+              );
+            }
+          }
+        } catch (dbErr: any) {
+          console.warn('Profile upsert exception:', dbErr);
+          if (
+            dbErr?.message?.toLowerCase().includes('unique') ||
+            dbErr?.message?.toLowerCase().includes('duplicate') ||
+            dbErr?.code === '23505'
+          ) {
+            return NextResponse.json(
+              {
+                success: false,
+                error: 'Nomor WhatsApp / telepon ini sudah terdaftar. Silakan gunakan nomor lain.',
+              },
+              { status: 409 }
+            );
+          }
         }
       }
     }
