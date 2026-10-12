@@ -12,17 +12,54 @@ export async function GET(
     if (isSupabaseConfigured()) {
       try {
         const supabase = await getSupabaseAdminClient();
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('orders')
           .select(`
             *,
+            customer:profiles!customer_id (id, full_name, phone),
             items:order_items(*)
           `)
           .or(`id.eq.${id},order_number.eq.${id}`)
-          .single();
+          .maybeSingle();
 
-        if (data && !error) {
-          return NextResponse.json({ success: true, data });
+        if (error || !data) {
+          const fallback = await supabase
+            .from('orders')
+            .select(`
+              *,
+              items:order_items(*)
+            `)
+            .or(`id.eq.${id},order_number.eq.${id}`)
+            .maybeSingle();
+          if (fallback.data) {
+            data = fallback.data;
+          }
+        }
+
+        if (data) {
+          const addr = typeof data.delivery_address === 'string'
+            ? (() => { try { return JSON.parse(data.delivery_address); } catch { return {}; } })()
+            : (data.delivery_address || {});
+          const customerName =
+            data.customer?.full_name ||
+            data.customer_name ||
+            addr.recipient_name ||
+            'Pelanggan Apotek';
+          const customerPhone =
+            data.customer?.phone ||
+            data.customer_phone ||
+            addr.phone ||
+            '-';
+
+          return NextResponse.json({
+            success: true,
+            data: {
+              ...data,
+              customer_name: customerName,
+              customer_phone: customerPhone,
+              delivery_address: addr,
+            },
+          });
         }
       } catch (dbErr) {
         console.warn('Supabase fetch order by id notice:', dbErr);
@@ -53,7 +90,12 @@ export async function PUT(
     const updates: any = { updated_at: new Date().toISOString() };
     if (status) updates.status = status;
     if (prescriptionStatus) updates.prescription_status = prescriptionStatus;
-    if (paymentStatus) updates.payment_status = paymentStatus;
+    if (paymentStatus) {
+      updates.payment_status = paymentStatus;
+    } else if (status === 'confirmed') {
+      // Ketika pesanan dikonfirmasi oleh admin, otomatis set payment_status ke paid (lunas)
+      updates.payment_status = 'paid';
+    }
 
     if (isSupabaseConfigured()) {
       const supabase = await getSupabaseAdminClient();

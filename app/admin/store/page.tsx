@@ -66,11 +66,21 @@ export default function AdminStoreSettingsPage() {
       .finally(() => setIsLoading(false));
   }, []);
 
+  const handleToggleQris = () => {
+    if (!settings.qris_enabled && (!settings.qris_image_url || !settings.qris_image_url.trim())) {
+      setErrorMessage('Foto barcode QRIS wajib diunggah terlebih dahulu sebelum mengaktifkan metode QRIS.');
+      return;
+    }
+    setErrorMessage('');
+    setSettings((prev) => ({ ...prev, qris_enabled: !prev.qris_enabled }));
+  };
+
   const handleQrisImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
     const file = e.target.files[0];
 
     setIsUploadingQris(true);
+    setErrorMessage('');
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -81,7 +91,7 @@ export default function AdminStoreSettingsPage() {
       });
       const json = await res.json();
       if (json.success && json.url) {
-        setSettings((prev) => ({ ...prev, qris_image_url: json.url }));
+        setSettings((prev) => ({ ...prev, qris_image_url: json.url, qris_enabled: true }));
       } else {
         alert(json.error || 'Gagal mengunggah foto QRIS');
       }
@@ -95,8 +105,16 @@ export default function AdminStoreSettingsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
     setErrorMessage('');
+
+    // Validasi: jika admin mengaktifkan QRIS, foto barcode QRIS wajib diunggah
+    if (settings.qris_enabled && (!settings.qris_image_url || !settings.qris_image_url.trim())) {
+      setErrorMessage('Foto barcode QRIS wajib diunggah jika ingin mengaktifkan metode QRIS.');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setIsSaving(true);
     try {
       const res = await fetch('/api/store', {
         method: 'PUT',
@@ -446,7 +464,7 @@ export default function AdminStoreSettingsPage() {
               type="button"
               role="switch"
               aria-checked={settings.qris_enabled}
-              onClick={() => setSettings({ ...settings, qris_enabled: !settings.qris_enabled })}
+              onClick={handleToggleQris}
               className={`relative inline-flex h-7 w-14 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 ${
                 settings.qris_enabled ? 'bg-emerald-500' : 'bg-slate-300'
               }`}
@@ -460,7 +478,7 @@ export default function AdminStoreSettingsPage() {
               />
             </button>
             <span
-              onClick={() => setSettings({ ...settings, qris_enabled: !settings.qris_enabled })}
+              onClick={handleToggleQris}
               className={`cursor-pointer select-none text-xs font-bold px-2.5 py-1 rounded-xl transition border ${
                 settings.qris_enabled
                   ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
@@ -471,6 +489,15 @@ export default function AdminStoreSettingsPage() {
             </span>
           </div>
         </div>
+
+        {settings.qris_enabled && !settings.qris_image_url && (
+          <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-rose-50 border border-rose-200 rounded-2xl text-rose-800 text-xs font-semibold">
+            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+            <span>
+              Upload foto barcode QRIS <strong>wajib diisi</strong> jika metode QRIS diaktifkan. Silakan unggah foto QRIS di bawah ini agar perubahan dapat disimpan.
+            </span>
+          </div>
+        )}
 
         {!settings.qris_enabled && (
           <div className="flex items-center gap-2.5 px-3.5 py-2.5 bg-amber-50 border border-amber-200/80 rounded-2xl text-amber-800 text-xs">
@@ -484,7 +511,12 @@ export default function AdminStoreSettingsPage() {
         <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs items-start transition ${!settings.qris_enabled ? 'opacity-60' : ''}`}>
           <div>
             <label className="block font-bold text-slate-700 mb-1">
-              Upload Gambar Barcode QRIS
+              Upload Gambar Barcode QRIS{' '}
+              {settings.qris_enabled ? (
+                <span className="text-rose-500 font-bold">* (Wajib diisi)</span>
+              ) : (
+                <span className="text-slate-400 font-normal">(Wajib jika QRIS aktif)</span>
+              )}
             </label>
             <p className="text-[11px] text-slate-500 mb-2">
               Unggah gambar barcode QRIS resmi apotek (Gopay/OVO/ShopeePay/BCA QRIS). Gambar akan ditampilkan saat pasien memilih bayar via QRIS.
@@ -530,9 +562,9 @@ export default function AdminStoreSettingsPage() {
                 />
                 <button
                   type="button"
-                  onClick={() => setSettings({ ...settings, qris_image_url: '' })}
+                  onClick={() => setSettings({ ...settings, qris_image_url: '', qris_enabled: false })}
                   className="absolute top-3 right-3 p-1.5 rounded-full bg-rose-600 text-white hover:bg-rose-700 shadow-md"
-                  title="Hapus gambar QRIS"
+                  title="Hapus gambar QRIS (Metode QRIS akan otomatis dinonaktifkan)"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>

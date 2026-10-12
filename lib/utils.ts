@@ -29,7 +29,7 @@ export function formatShortRupiah(amount: number): string {
 export function getOrderStatusBadge(status: string) {
   switch (status) {
     case 'pending':
-      return { label: 'Menunggu Pembayaran', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+      return { label: 'Menunggu Konfirmasi', color: 'bg-amber-50 text-amber-700 border-amber-200' };
     case 'waiting_prescription':
       return { label: 'Menunggu Upload Resep', color: 'bg-purple-50 text-purple-700 border-purple-200' };
     case 'prescription_review':
@@ -46,6 +46,23 @@ export function getOrderStatusBadge(status: string) {
       return { label: 'Dibatalkan', color: 'bg-rose-50 text-rose-700 border-rose-200' };
     default:
       return { label: status, color: 'bg-slate-100 text-slate-700 border-slate-200' };
+  }
+}
+
+export function getPaymentStatusBadge(status?: string) {
+  switch (status) {
+    case 'waiting_confirmation':
+      return { label: 'Sedang Dikonfirmasi', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+    case 'paid':
+      return { label: 'Lunas', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    case 'pending':
+      return { label: 'Belum Dibayar', color: 'bg-slate-100 text-slate-700 border-slate-200' };
+    case 'failed':
+      return { label: 'Gagal', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+    case 'cancelled':
+      return { label: 'Dibatalkan', color: 'bg-rose-50 text-rose-700 border-rose-200' };
+    default:
+      return { label: status || 'Belum Dibayar', color: 'bg-slate-100 text-slate-700 border-slate-200' };
   }
 }
 

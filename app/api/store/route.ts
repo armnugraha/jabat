@@ -121,6 +121,13 @@ export async function PUT(request: Request) {
       updated_at: updatedDate,
     };
 
+    if (payload.qris_enabled && (!payload.qris_image_url || typeof payload.qris_image_url !== 'string' || !payload.qris_image_url.trim())) {
+      return NextResponse.json(
+        { success: false, error: 'Foto barcode QRIS wajib diunggah jika ingin mengaktifkan metode QRIS.' },
+        { status: 400 }
+      );
+    }
+
     if (Array.isArray(payload.bank_accounts)) {
       payload.bank_account_number = JSON.stringify(payload.bank_accounts);
       payload.bank_name = payload.bank_accounts[0]?.bank_name || payload.bank_name || '';

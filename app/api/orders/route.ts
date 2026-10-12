@@ -20,6 +20,7 @@ export async function GET(request: Request) {
           .from('orders')
           .select(`
             *,
+            customer:profiles!customer_id (id, full_name, phone),
             items:order_items(*)
           `)
           .order('created_at', { ascending: false });
@@ -28,11 +29,51 @@ export async function GET(request: Request) {
           query = query.eq('customer_id', userId);
         }
 
-        const { data, error } = await query;
+        let { data, error } = await query;
+        if (error) {
+          const fallbackQuery = supabase
+            .from('orders')
+            .select(`
+              *,
+              items:order_items(*)
+            `)
+            .order('created_at', { ascending: false });
+          if (role === 'customer' && userId) {
+            fallbackQuery.eq('customer_id', userId);
+          }
+          const fbRes = await fallbackQuery;
+          if (fbRes.data) {
+            data = fbRes.data;
+            error = null;
+          }
+        }
 
         if (!error && data) {
+          const normalized = data.map((ord: any) => {
+            const addr = typeof ord.delivery_address === 'string'
+              ? (() => { try { return JSON.parse(ord.delivery_address); } catch { return {}; } })()
+              : (ord.delivery_address || {});
+            const customerName =
+              ord.customer?.full_name ||
+              ord.customer_name ||
+              addr.recipient_name ||
+              'Pelanggan Apotek';
+            const customerPhone =
+              ord.customer?.phone ||
+              ord.customer_phone ||
+              addr.phone ||
+              '-';
+
+            return {
+              ...ord,
+              customer_name: customerName,
+              customer_phone: customerPhone,
+              delivery_address: addr,
+            };
+          });
+
           // Combine with any in-memory orders created for this user/session
-          const combined = [...data];
+          const combined = [...normalized];
           for (const imo of inMemoryOrders) {
             if (role !== 'customer' || imo.customer_id === userId) {
               if (!combined.some((o) => o.id === imo.id || o.order_number === imo.order_number)) {
@@ -92,23 +133,33 @@ export async function POST(request: Request) {
     const orderNumber = `ASM-${Date.now().toString().slice(-6)}`;
     const orderId = `ord-${Date.now()}`;
 
+    // Flow status: Jika customer pilih qris atau bank_transfer, statusnya sedang dikonfirmasi dulu dan harus dicek admin
+    const isQrisOrTransfer = paymentMethod === 'qris' || paymentMethod === 'bank_transfer';
+    const initialStatus = requiresPrescription ? 'prescription_review' : 'pending';
+    const initialPaymentStatus = isQrisOrTransfer
+      ? 'waiting_confirmation'
+      : (paymentMethod === 'cod' ? 'pending' : 'waiting_confirmation');
+
+    const resolvedRecipientName = customerName || deliveryAddress?.recipient_name || 'Pelanggan Apotek';
+    const resolvedPhone = customerPhone || deliveryAddress?.phone || '-';
+
     const formattedOrder = {
       id: orderId,
       order_number: orderNumber,
       customer_id: customerId,
-      customer_name: customerName,
-      customer_phone: customerPhone,
-      status: requiresPrescription ? 'prescription_review' : 'preparing',
+      customer_name: resolvedRecipientName,
+      customer_phone: resolvedPhone,
+      status: initialStatus,
       payment_method: paymentMethod || 'qris',
-      payment_status: paymentMethod === 'cod' ? 'pending' : 'paid',
+      payment_status: initialPaymentStatus,
       subtotal: Number(subtotal) || 0,
       discount: Number(discount) || 0,
       delivery_fee: Number(deliveryFee) || 0,
       total: Number(total) || 0,
       delivery_option: deliveryOption || 'express',
       delivery_address: deliveryAddress || {
-        recipient_name: customerName || 'Pasien Apotek',
-        phone: customerPhone || '0812-3456-7890',
+        recipient_name: resolvedRecipientName,
+        phone: resolvedPhone,
         address_line: 'Tebet Barat, Jakarta Selatan',
       },
       customer_note: customerNotes || '',

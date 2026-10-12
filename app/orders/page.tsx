@@ -77,13 +77,13 @@ function OrdersContent() {
           <>
             {/* Order Success Notice if just placed */}
             {placed && (
-              <div className="p-4 rounded-3xl bg-emerald-50 border border-emerald-200 text-emerald-950 space-y-2 animate-in fade-in">
-                <div className="flex items-center gap-2 font-bold text-xs text-emerald-800">
-                  <CheckCircle2 className="w-4.5 h-4.5 text-emerald-600" />
-                  <span>Pesanan Berhasil Dibuat!</span>
+              <div className="p-4 rounded-3xl bg-amber-50 border border-amber-200 text-amber-950 space-y-2 animate-in fade-in">
+                <div className="flex items-center gap-2 font-bold text-xs text-amber-800">
+                  <Clock className="w-4.5 h-4.5 text-amber-600" />
+                  <span>Pesanan Berhasil Dibuat • Sedang Dikonfirmasi</span>
                 </div>
-                <p className="text-[11px] text-emerald-700 leading-relaxed">
-                  Apoteker kami sedang menyiapkan obat sesuai standar farmasi. Anda dapat memantau status pesanan secara berkala di halaman ini.
+                <p className="text-[11px] text-amber-800/90 leading-relaxed">
+                  Pesanan dan pembayaran Anda telah masuk ke sistem apotek dan sedang dalam antrean pengecekan admin. Admin apotek akan mengonfirmasi pembayaran dan staf akan segera menyiapkan obat Anda.
                 </p>
               </div>
             )}

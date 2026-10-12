@@ -18,7 +18,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { mockStoreSettings } from '@/lib/data/mock-data';
-import { formatRupiah, getOrderStatusBadge } from '@/lib/utils';
+import { formatRupiah, getOrderStatusBadge, getPaymentStatusBadge } from '@/lib/utils';
 import { Order, OrderStatus } from '@/lib/types';
 import { useAuth } from '@/lib/store/auth-context';
 import { AuthRequiredCard } from '@/components/customer/AuthRequiredCard';
@@ -46,13 +46,14 @@ export default function OrderDetailPage() {
   }, [id]);
 
   const badge = order ? getOrderStatusBadge(order.status) : { label: 'Memuat...', color: 'bg-slate-100 text-slate-700' };
+  const paymentBadge = order ? getPaymentStatusBadge(order.payment_status) : { label: 'Memuat...', color: 'bg-slate-100 text-slate-700' };
 
   // Define steps for the visual timeline
   const normalSteps: { status: OrderStatus; label: string; desc: string }[] = [
     {
       status: 'pending',
-      label: 'Pesanan Dibuat',
-      desc: 'Pesanan diterima sistem apotek',
+      label: 'Sedang Dikonfirmasi',
+      desc: 'Pesanan & pembayaran sedang dicek admin apotek',
     },
     {
       status: 'confirmed',
@@ -79,8 +80,8 @@ export default function OrderDetailPage() {
   const prescriptionSteps: { status: OrderStatus; label: string; desc: string }[] = [
     {
       status: 'pending',
-      label: 'Pesanan Dibuat',
-      desc: 'Pesanan resep dibuat customer',
+      label: 'Sedang Dikonfirmasi',
+      desc: 'Pesanan & pembayaran sedang dicek admin apotek',
     },
     {
       status: 'prescription_review',
@@ -180,15 +181,33 @@ export default function OrderDetailPage() {
         ) : (
           <>
             {/* Status Header Banner */}
-            <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-stitch space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-500">Status Saat Ini:</span>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-bold border ${badge.color}`}
-                >
-                  {badge.label}
-                </span>
+            <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-stitch space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">Status Pesanan:</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold border ${badge.color}`}>
+                    {badge.label}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-slate-500">Pembayaran ({order.payment_method?.toUpperCase()}):</span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${paymentBadge.color}`}>
+                    {paymentBadge.label}
+                  </span>
+                </div>
               </div>
+
+              {order.payment_status === 'waiting_confirmation' && (
+                <div className="p-3 bg-amber-50 border border-amber-200/80 rounded-2xl text-amber-900 text-xs flex items-start gap-2.5">
+                  <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold">Pembayaran Sedang Dikonfirmasi</p>
+                    <p className="text-[11px] text-amber-800/90 mt-0.5 leading-relaxed">
+                      Pesanan dan pembayaran via {order.payment_method === 'qris' ? 'QRIS' : order.payment_method === 'bank_transfer' ? 'Transfer Bank' : 'COD'} sedang dicek oleh admin apotek. Staf kami akan memverifikasi dan segera menyiapkan obat Anda.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-2 border-t border-slate-100 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0">
