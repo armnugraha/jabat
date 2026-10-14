@@ -193,7 +193,7 @@ export default function AdminLayout({
                 {storeSettings?.store_name || 'Apotek Jabat'}
               </h1>
               <p className="text-[10px] text-slate-500">
-                SIPA Farmasi: {storeSettings?.pharmacist_sipa || 'SIPA Resmi'}
+                SIPA Farmasi: {storeSettings?.pharmacist_sipa || '-'}
               </p>
             </div>
           </div>

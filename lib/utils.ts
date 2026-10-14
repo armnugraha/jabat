@@ -105,3 +105,14 @@ export function isStoreOpenNow(store?: { is_open?: boolean; opening_time?: strin
   };
 }
 
+export function formatChatTime(dateStr?: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
+  } catch {
+    return dateStr;
+  }
+}
+

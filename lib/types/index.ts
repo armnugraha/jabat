@@ -191,6 +191,7 @@ export interface ChatMessage {
   sender_id: string;
   sender_role: UserRole;
   sender_name: string;
+  sender_avatar?: string | null;
   message: string;
   attachment_path?: string;
   attachment_url?: string;
@@ -211,6 +212,21 @@ export interface Conversation {
   last_message: string;
   last_message_at: string;
   unread_count: number;
+}
+
+export interface AutoReplyRule {
+  id: string;
+  keywords: string[];
+  reply_message: string;
+  recommended_product_id?: string | null;
+  recommended_product?: Product;
+  is_active: boolean;
+}
+
+export interface AutoReplyConfig {
+  enabled: boolean;
+  fallback_message: string;
+  rules: AutoReplyRule[];
 }
 
 export interface BankAccount {

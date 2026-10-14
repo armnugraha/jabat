@@ -128,7 +128,7 @@ export const StoreInfoFooterCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <FileText className="w-3.5 h-3.5 text-sky-600 shrink-0" />
           <span>
-            Nomor SIPA: <span className="font-mono text-slate-700">{store?.pharmacist_sipa || 'SIPA Resmi'}</span>
+            Nomor SIPA: <span className="font-mono text-slate-700">{store?.pharmacist_sipa || '-'}</span>
           </span>
         </div>
       </div>
