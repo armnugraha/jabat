@@ -16,6 +16,11 @@ import {
   MessageCircle,
   Info,
   ChevronRight,
+  ChevronLeft,
+  Maximize2,
+  X,
+  Sparkles,
+  Check,
   Plus,
   Minus,
   Loader2,
@@ -48,6 +53,13 @@ export default function ProductDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [store, setStore] = useState<StoreSettings>(mockStoreSettings);
 
+  // Photo Slider & Lightbox State
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [selectedBundleIds, setSelectedBundleIds] = useState<string[]>([]);
+
   const isFavorite = product ? isInWishlist(product.id) || (product.slug && isInWishlist(product.slug)) : false;
 
   // Fetch store settings from API
@@ -62,9 +74,22 @@ export default function ProductDetailPage() {
       .catch((err) => console.error('Error loading store settings:', err));
   }, []);
 
+  // Fetch all products for dynamic complementary recommendations
+  useEffect(() => {
+    fetch('/api/products')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setAllProducts(json.data);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   // Fetch product detail from API
   useEffect(() => {
     setIsLoading(true);
+    setActiveImageIndex(0);
     fetch(`/api/products/${id}`)
       .then((res) => res.json())
       .then((json) => {
@@ -88,6 +113,56 @@ export default function ProductDetailPage() {
         setIsLoading(false);
       });
   }, [id]);
+
+  // Computed Images List for Slider (Hook - must be before any return)
+  const imageList = React.useMemo(() => {
+    if (!product) return ['https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80'];
+    const list: string[] = [];
+    if (product.image_url) list.push(product.image_url);
+    if (Array.isArray(product.images)) {
+      product.images.forEach((img) => {
+        if (img && typeof img === 'string' && !list.includes(img)) {
+          list.push(img);
+        }
+      });
+    }
+    return list.length > 0 ? list : ['https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80'];
+  }, [product]);
+
+  // Dynamic Complementary / Frequently Bought Together Algorithm (Hook - must be before any return)
+  const frequentlyBoughtTogether = React.useMemo(() => {
+    if (!product) return [];
+    const sourceList = allProducts.length > 0 ? allProducts : mockProducts;
+    const candidates = sourceList.filter((p) => p.id !== product.id && p.slug !== product.slug);
+
+    const scored = candidates.map((p) => {
+      let score = 0;
+      // 1. Same category bonus
+      if (p.category_id && p.category_id === product.category_id) score += 10;
+
+      // 2. Complementary categories (Vitamins/Supplements, First Aid, OTC)
+      const catName = (p.category?.name || '').toLowerCase();
+      if (catName.includes('vitamin') || catName.includes('suplemen')) score += 8;
+      if (catName.includes('alat') || catName.includes('perawatan')) score += 5;
+
+      // 3. Stock availability & popularity bonus
+      const hasStock = p.variants?.some((v) => (v.stock || 0) > 0);
+      if (hasStock) score += 4;
+      if (p.is_featured) score += 2;
+
+      return { product: p, score };
+    });
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.slice(0, 2).map((s) => s.product);
+  }, [product, allProducts]);
+
+  // Keep bundle items selected by default (Hook - must be before any return)
+  useEffect(() => {
+    if (frequentlyBoughtTogether.length > 0) {
+      setSelectedBundleIds(frequentlyBoughtTogether.map((p) => p.id));
+    }
+  }, [frequentlyBoughtTogether]);
 
   if (isLoading || !product || !selectedVariant) {
     return (
@@ -132,6 +207,52 @@ export default function ProductDetailPage() {
 
   const isOutOfStock = (selectedVariant?.stock || 0) <= 0;
   const currentSubtotal = selectedVariant.price * (isOutOfStock ? 0 : quantity);
+
+  const currentImageIndex = Math.min(activeImageIndex, Math.max(0, imageList.length - 1));
+
+  const handlePrevImage = () => {
+    setActiveImageIndex((prev) => (prev > 0 ? prev - 1 : imageList.length - 1));
+  };
+
+  const handleNextImage = () => {
+    setActiveImageIndex((prev) => (prev < imageList.length - 1 ? prev + 1 : 0));
+  };
+
+  const toggleBundleItem = (bundleItemId: string) => {
+    setSelectedBundleIds((prev) =>
+      prev.includes(bundleItemId) ? prev.filter((i) => i !== bundleItemId) : [...prev, bundleItemId]
+    );
+  };
+
+  const selectedBundleItems = frequentlyBoughtTogether.filter((p) =>
+    selectedBundleIds.includes(p.id)
+  );
+
+  const bundleTotal =
+    (selectedVariant ? selectedVariant.price * quantity : 0) +
+    selectedBundleItems.reduce(
+      (sum, item) => sum + (item.variants?.[0]?.price || 0),
+      0
+    );
+
+  const handleBuyBundle = () => {
+    if (!product || !selectedVariant) return;
+
+    // 1. Add current main product
+    addItem(product, selectedVariant, quantity);
+
+    // 2. Add each selected companion product
+    selectedBundleItems.forEach((item) => {
+      const defaultVariant = item.variants?.[0];
+      if (defaultVariant) {
+        addItem(item, defaultVariant, 1);
+      }
+    });
+
+    setToastMessage(`Paket hemat (${selectedBundleItems.length + 1} produk) berhasil masuk keranjang!`);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2500);
+  };
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 pb-28 lg:pb-16">
@@ -246,23 +367,119 @@ export default function ProductDetailPage() {
                 </div>
               </div>
 
-              {/* Product Image */}
-              <div className="w-full aspect-[4/3] lg:aspect-square bg-slate-50 rounded-2xl flex items-center justify-center p-4 relative overflow-hidden border border-slate-100">
-                <img
-                  src={product.image_url}
-                  alt={product.name}
-                  className="w-full h-full object-contain mix-blend-multiply transition-transform hover:scale-105 duration-300"
-                />
-              </div>
+              {/* Interactive Product Image Slider */}
+              <div className="relative group">
+                <div
+                  className="w-full aspect-[4/3] lg:aspect-square bg-slate-50 rounded-2xl flex items-center justify-center p-4 relative overflow-hidden border border-slate-100 select-none cursor-zoom-in"
+                  onClick={() => setIsLightboxOpen(true)}
+                  onTouchStart={(e) => setTouchStartX(e.touches[0].clientX)}
+                  onTouchEnd={(e) => {
+                    if (touchStartX === null) return;
+                    const diff = touchStartX - e.changedTouches[0].clientX;
+                    if (diff > 40) handleNextImage();
+                    else if (diff < -40) handlePrevImage();
+                    setTouchStartX(null);
+                  }}
+                >
+                  <img
+                    key={imageList[currentImageIndex]}
+                    src={imageList[currentImageIndex]}
+                    alt={`${product.name} - Foto ${currentImageIndex + 1}`}
+                    className="w-full h-full object-contain mix-blend-multiply transition-all duration-300 hover:scale-105"
+                  />
 
-              {/* Pagination Dots / Image Indicator */}
-              <div className="flex items-center justify-center gap-1.5 mt-3">
-                <span className="w-4 h-1.5 rounded-full bg-sky-600" />
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-300" />
-                <span className="text-[10px] text-slate-400 ml-2 font-medium">
-                  1/3 Foto
-                </span>
+                  {/* Floating Zoom Button */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsLightboxOpen(true);
+                    }}
+                    className="absolute top-3 right-3 p-2 rounded-xl bg-white/90 backdrop-blur-xs text-slate-700 shadow-sm border border-slate-200/80 hover:bg-white hover:text-sky-600 transition"
+                    title="Perbesar Foto Kemasan & Etiket"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+
+                  {/* Floating Previous & Next Buttons */}
+                  {imageList.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePrevImage();
+                        }}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs text-slate-700 shadow-md border border-slate-200/80 flex items-center justify-center hover:bg-white hover:text-sky-600 transition active:scale-90"
+                        aria-label="Foto Sebelumnya"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleNextImage();
+                        }}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/90 backdrop-blur-xs text-slate-700 shadow-md border border-slate-200/80 flex items-center justify-center hover:bg-white hover:text-sky-600 transition active:scale-90"
+                        aria-label="Foto Berikutnya"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
+
+                  {/* Floating Photo Counter Badge */}
+                  <div className="absolute bottom-3 right-3 px-2 py-0.5 rounded-lg bg-slate-900/70 backdrop-blur-xs text-white text-[10px] font-bold">
+                    {currentImageIndex + 1} / {imageList.length} Foto
+                  </div>
+                </div>
+
+                {/* Thumbnails Row if Multiple Images */}
+                {imageList.length > 1 && (
+                  <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1 scrollbar-none">
+                    {imageList.map((imgUrl, idx) => {
+                      const isActive = idx === currentImageIndex;
+                      return (
+                        <button
+                          key={imgUrl + idx}
+                          type="button"
+                          onClick={() => setActiveImageIndex(idx)}
+                          className={`w-14 h-14 rounded-xl border-2 p-1 bg-white shrink-0 overflow-hidden transition cursor-pointer ${
+                            isActive
+                              ? 'border-sky-600 ring-2 ring-sky-500/20'
+                              : 'border-slate-200 hover:border-slate-300 opacity-60 hover:opacity-100'
+                          }`}
+                        >
+                          <img
+                            src={imgUrl}
+                            alt={`Thumbnail ${idx + 1}`}
+                            className="w-full h-full object-contain mix-blend-multiply"
+                          />
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Interactive Dynamic Pagination Dots */}
+                {imageList.length > 1 && (
+                  <div className="flex items-center justify-center gap-1.5 mt-2.5">
+                    {imageList.map((_, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveImageIndex(idx)}
+                        className={`transition-all duration-200 cursor-pointer ${
+                          idx === currentImageIndex
+                            ? 'w-5 h-1.5 rounded-full bg-sky-600'
+                            : 'w-1.5 h-1.5 rounded-full bg-slate-300 hover:bg-slate-400'
+                        }`}
+                        aria-label={`Pindah ke foto ${idx + 1}`}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -532,62 +749,115 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            {/* Frequently Bought Together */}
-            <div>
-              <div className="flex items-center justify-between mb-2 px-1">
-                <div>
-                  <h3 className="text-xs font-bold text-slate-900">
-                    Sering Dibeli Bersamaan
-                  </h3>
-                  <p className="text-[10px] text-slate-500">
-                    Lengkapi kebutuhan kesehatan keluarga
-                  </p>
-                </div>
-                <Link
-                  href="/products"
-                  className="text-[11px] font-bold text-sky-600 flex items-center gap-0.5"
-                >
-                  <span>Lihat Semua</span>
-                  <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5">
-                {mockProducts.slice(4, 6).map((item) => (
-                  <div
-                    key={item.id}
-                    className="bg-white rounded-2xl border border-slate-200 p-3 flex flex-col justify-between shadow-stitch"
-                  >
-                    <div>
-                      <div className="w-full aspect-[4/3] bg-slate-50 rounded-xl overflow-hidden mb-2">
-                        <img
-                          src={item.image_url}
-                          alt={item.name}
-                          className="w-full h-full object-contain mix-blend-multiply"
-                        />
-                      </div>
-                      <span className="text-[9px] font-semibold text-sky-600">
-                        {item.manufacturer || 'Suplemen'}
-                      </span>
-                      <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
-                        {item.name}
-                      </h4>
-                      <div className="text-xs font-extrabold text-sky-700 mt-1">
-                        {formatRupiah(item.variants[0]?.price || 10000)}
-                      </div>
+            {/* Frequently Bought Together / Rekomendasi Terapi Pelengkap */}
+            {frequentlyBoughtTogether.length > 0 && (
+              <div className="bg-white rounded-3xl border border-slate-200/80 p-4 sm:p-5 shadow-stitch space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-500 fill-amber-500" />
+                      <h3 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                        Sering Dibeli Bersamaan
+                      </h3>
                     </div>
-
-                    <button
-                      onClick={() => addItem(item, item.variants[0], 1)}
-                      className="mt-2 w-full py-1.5 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-700 font-bold text-[11px] flex items-center justify-center gap-1 transition"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Tambah</span>
-                    </button>
+                    <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5">
+                      Kombinasi terapi & suplemen yang saling melengkapi
+                    </p>
                   </div>
-                ))}
+                  <span className="text-[10px] font-bold text-sky-700 bg-sky-50 px-2 py-0.5 rounded-full border border-sky-100 hidden sm:inline-block">
+                    Rekomendasi Apoteker
+                  </span>
+                </div>
+
+                {/* Candidate Companion Items */}
+                <div className="space-y-2.5">
+                  {frequentlyBoughtTogether.map((item) => {
+                    const isSelected = selectedBundleIds.includes(item.id);
+                    const defaultVariant = item.variants?.[0];
+                    const itemPrice = defaultVariant?.price || 0;
+                    const inStock = (defaultVariant?.stock || 0) > 0;
+
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => toggleBundleItem(item.id)}
+                        className={`p-3 rounded-2xl border transition cursor-pointer flex items-center justify-between gap-3 ${
+                          isSelected
+                            ? 'border-sky-300 bg-sky-50/40'
+                            : 'border-slate-200 bg-white hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          {/* Checkbox */}
+                          <div
+                            className={`w-5 h-5 rounded-lg border flex items-center justify-center shrink-0 transition ${
+                              isSelected
+                                ? 'bg-sky-600 border-sky-600 text-white'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+                          </div>
+
+                          {/* Image */}
+                          <div className="w-12 h-12 bg-white rounded-xl border border-slate-100 overflow-hidden shrink-0 p-1">
+                            <img
+                              src={item.image_url}
+                              alt={item.name}
+                              className="w-full h-full object-contain mix-blend-multiply"
+                            />
+                          </div>
+
+                          {/* Detail */}
+                          <div className="min-w-0">
+                            <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider block">
+                              {item.category?.name || item.manufacturer || 'Pelengkap'}
+                            </span>
+                            <h4 className="text-xs font-bold text-slate-900 truncate">
+                              {item.name}
+                            </h4>
+                            <div className="text-xs font-extrabold text-sky-700 mt-0.5">
+                              {formatRupiah(itemPrice)}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* View Product Link */}
+                        <Link
+                          href={`/products/${item.slug || item.id}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[10px] text-slate-400 hover:text-sky-600 p-1 shrink-0"
+                          title="Lihat detail"
+                        >
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Bundle Buy Action */}
+                <div className="mt-2 pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/70 p-3 rounded-2xl">
+                  <div>
+                    <div className="text-[10px] text-slate-500">
+                      Total Paket ({selectedBundleItems.length + 1} Produk):
+                    </div>
+                    <div className="text-sm font-black text-slate-900">
+                      {formatRupiah(bundleTotal)}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleBuyBundle}
+                    disabled={isOutOfStock || selectedBundleItems.length === 0}
+                    className="py-2 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-200 disabled:text-slate-400 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition active:scale-[0.98]"
+                  >
+                    <ShoppingBag className="w-3.5 h-3.5" />
+                    <span>Beli Paket Bersama</span>
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           {/* ========================================================================= */}
@@ -817,6 +1087,61 @@ export default function ProductDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Fullscreen Photo Lightbox Modal */}
+      {isLightboxOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4"
+          onClick={() => setIsLightboxOpen(false)}
+        >
+          {/* Close button */}
+          <button
+            onClick={() => setIsLightboxOpen(false)}
+            className="absolute top-4 right-4 z-10 p-3 rounded-full bg-white/10 hover:bg-white/20 text-white backdrop-blur transition"
+            aria-label="Tutup"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
+          {/* Indicator */}
+          <div className="absolute top-4 left-4 z-10 px-3 py-1.5 rounded-full bg-black/50 text-white text-xs font-semibold backdrop-blur border border-white/10">
+            {currentImageIndex + 1} / {imageList.length}
+          </div>
+
+          {/* Main Zoomed Image */}
+          <div
+            className="relative max-w-4xl max-h-[85vh] w-full h-full flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={imageList[currentImageIndex]}
+              alt={product.name}
+              className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+            />
+
+            {/* Slider arrows in lightbox */}
+            {imageList.length > 1 && (
+              <>
+                <button
+                  onClick={handlePrevImage}
+                  className="absolute left-2 sm:-left-12 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur transition"
+                  aria-label="Foto Sebelumnya"
+                >
+                  <ChevronLeft className="w-6 h-6" />
+                </button>
+                <button
+                  onClick={handleNextImage}
+                  className="absolute right-2 sm:-right-12 top-1/2 -translate-y-1/2 p-3 rounded-full bg-white/20 hover:bg-white/30 text-white backdrop-blur transition"
+                  aria-label="Foto Berikutnya"
+                >
+                  <ChevronRight className="w-6 h-6" />
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

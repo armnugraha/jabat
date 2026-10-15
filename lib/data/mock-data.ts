@@ -116,6 +116,11 @@ export const mockProducts: Product[] = [
     precautions: 'Bekerja pada pusat pengatur suhu di hipotalamus untuk menurunkan suhu tubuh dan menghambat sintesis prostaglandin. Hati-hati pada penderita gangguan ginjal dan hati.',
     storage_instructions: 'Simpan pada suhu ruangan (<30°C), tempat sejuk dan kering, terlindung dari paparan cahaya matahari langsung.',
     image_url: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1550572017-ed200f5e6343?w=600&auto=format&fit=crop&q=80',
+    ],
     variants: [
       {
         id: 'var-para-tablet',
@@ -173,6 +178,10 @@ export const mockProducts: Product[] = [
     precautions: 'WAJIB DENGAN RESEP DOKTER. Hati-hati riwayat alergi penisilin/sefalosporin.',
     storage_instructions: 'Simpan pada suhu sejuk di bawah 25°C dan kering.',
     image_url: 'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=600&auto=format&fit=crop&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
+    ],
     variants: [
       {
         id: 'var-amox-strip',
@@ -206,6 +215,11 @@ export const mockProducts: Product[] = [
     precautions: 'Kocok dahulu sebelum diminum. Tidak dianjurkan untuk anak di bawah 2 tahun tanpa petunjuk dokter.',
     storage_instructions: 'Simpan di tempat kering dan sejuk.',
     image_url: 'https://images.unsplash.com/photo-1550572017-ed200f5e6343?w=600&auto=format&fit=crop&q=80',
+    images: [
+      'https://images.unsplash.com/photo-1550572017-ed200f5e6343?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1577401239170-897942555fb3?w=600&auto=format&fit=crop&q=80',
+    ],
     variants: [
       {
         id: 'var-obh-botol',
