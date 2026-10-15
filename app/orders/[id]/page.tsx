@@ -86,7 +86,7 @@ export default function OrderDetailPage() {
     {
       status: 'prescription_review',
       label: 'Verifikasi Resep',
-      desc: `Ditinjau oleh ${mockStoreSettings.pharmacist_name}`,
+      desc: 'Ditinjau oleh Apoteker Penanggung Jawab (PJ)',
     },
     {
       status: 'confirmed',

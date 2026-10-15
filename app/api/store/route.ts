@@ -62,11 +62,35 @@ export async function GET() {
         .limit(1)
         .maybeSingle();
 
+      // Fetch registered pharmacists from profiles (Single Source of Truth)
+      const { data: pharmacists } = await supabaseAnon
+        .from('profiles')
+        .select('id, full_name, sipa_number, phone, avatar_url, role')
+        .eq('role', 'pharmacist')
+        .order('created_at', { ascending: true });
+
+      const activePharmacist =
+        pharmacists?.find((p) => p.id === (data as any)?.pharmacist_id) ||
+        pharmacists?.[0] ||
+        null;
+
       if (data && !error) {
+        const mergedData = {
+          ...data,
+          // Sync with profile single source of truth
+          pharmacist_name: activePharmacist?.full_name || data.pharmacist_name || mockStoreSettings.pharmacist_name,
+          pharmacist_sipa: activePharmacist?.sipa_number || data.pharmacist_sipa || mockStoreSettings.pharmacist_sipa,
+          pharmacist_id: activePharmacist?.id || (data as any)?.pharmacist_id || null,
+        };
+
         return NextResponse.json(
           {
             success: true,
-            data: formatStoreSettings(data),
+            data: {
+              ...formatStoreSettings(mergedData),
+              available_pharmacists: pharmacists || [],
+              active_pharmacist: activePharmacist,
+            },
             source: 'supabase',
           },
           { headers: noCacheHeaders }
@@ -81,7 +105,17 @@ export async function GET() {
     return NextResponse.json(
       {
         success: true,
-        data: formatStoreSettings(mockStoreSettings),
+        data: {
+          ...formatStoreSettings(mockStoreSettings),
+          available_pharmacists: [
+            {
+              id: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
+              full_name: mockStoreSettings.pharmacist_name,
+              sipa_number: mockStoreSettings.pharmacist_sipa,
+              role: 'pharmacist',
+            },
+          ],
+        },
         source: 'fallback',
       },
       { headers: noCacheHeaders }
@@ -120,6 +154,36 @@ export async function PUT(request: Request) {
       ...body,
       updated_at: updatedDate,
     };
+
+    // Remove client-side extra fields before writing to store_settings table
+    delete payload.available_pharmacists;
+    delete payload.active_pharmacist;
+
+    // Synchronize pharmacist name & SIPA from the assigned pharmacist profile
+    if (payload.pharmacist_id) {
+      const { data: pharm } = await supabase
+        .from('profiles')
+        .select('full_name, sipa_number')
+        .eq('id', payload.pharmacist_id)
+        .maybeSingle();
+      if (pharm) {
+        payload.pharmacist_name = pharm.full_name;
+        payload.pharmacist_sipa = pharm.sipa_number || '';
+      }
+    } else {
+      // Find current active pharmacist from profiles
+      const { data: pharm } = await supabase
+        .from('profiles')
+        .select('id, full_name, sipa_number')
+        .eq('role', 'pharmacist')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (pharm) {
+        payload.pharmacist_name = pharm.full_name;
+        payload.pharmacist_sipa = pharm.sipa_number || '';
+      }
+    }
 
     if (payload.qris_enabled && (!payload.qris_image_url || typeof payload.qris_image_url !== 'string' || !payload.qris_image_url.trim())) {
       return NextResponse.json(

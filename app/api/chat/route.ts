@@ -42,15 +42,18 @@ async function fetchConversationMessages(supabase: any, convId: string, customer
     return [];
   }
 
-  // 2. Resolve customer info if customerId provided
-  let customerProfile: any = null;
-  if (customerId) {
-    const { data: cust } = await supabase
+  // 2. Resolve sender profiles
+  const senderIds = Array.from(
+    new Set(messages.map((m: any) => m.sender_id).filter(Boolean))
+  );
+
+  const senderMap = new Map<string, any>();
+  if (senderIds.length > 0) {
+    const { data: profs } = await supabase
       .from('profiles')
-      .select('id, full_name, role, avatar_url')
-      .eq('id', customerId)
-      .maybeSingle();
-    customerProfile = cust;
+      .select('id, full_name, role, avatar_url, sipa_number')
+      .in('id', senderIds);
+    (profs || []).forEach((p: any) => senderMap.set(p.id, p));
   }
 
   // 3. Batch fetch recommended products if any message has one
@@ -70,15 +73,13 @@ async function fetchConversationMessages(supabase: any, convId: string, customer
 
   // 4. Map into standard ChatMessage structure
   return messages.map((row: any) => {
-    const isCustomer = customerId ? row.sender_id === customerId : row.sender_id !== DEFAULT_PHARMACIST_ID;
-    const isPharmacist = !isCustomer || row.sender_id === DEFAULT_PHARMACIST_ID;
+    const sender = senderMap.get(row.sender_id);
+    const isCustomer = sender ? sender.role === 'customer' : (customerId ? row.sender_id === customerId : row.sender_id !== DEFAULT_PHARMACIST_ID);
+    const isPharmacist = !isCustomer || row.sender_id === DEFAULT_PHARMACIST_ID || sender?.role === 'pharmacist';
 
-    const senderName = isCustomer
-      ? (customerProfile?.full_name || 'Pelanggan')
-      : (isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Apoteker');
-
+    const senderName = sender?.full_name || (isCustomer ? 'Pelanggan' : DEFAULT_PHARMACIST_NAME);
     const senderRole = isCustomer ? 'customer' : 'pharmacist';
-    const senderAvatar = isCustomer ? (customerProfile?.avatar_url || null) : null;
+    const senderAvatar = sender?.avatar_url || null;
 
     return {
       id: row.id,
@@ -444,13 +445,25 @@ export async function POST(request: Request) {
       recommendedProductObj = prod || undefined;
     }
 
+    let senderDisplayName = isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Pelanggan';
+    let senderDisplayAvatar: string | null = null;
+    if (actualSenderId) {
+      const { data: prof } = await supabase
+        .from('profiles')
+        .select('full_name, avatar_url')
+        .eq('id', actualSenderId)
+        .maybeSingle();
+      if (prof?.full_name) senderDisplayName = prof.full_name;
+      if (prof?.avatar_url) senderDisplayAvatar = prof.avatar_url;
+    }
+
     const formatted = {
       id: inserted.id,
       conversation_id: inserted.conversation_id,
       sender_id: inserted.sender_id,
-      sender_name: isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Pelanggan',
+      sender_name: senderDisplayName,
       sender_role: isPharmacist ? 'pharmacist' : 'customer',
-      sender_avatar: null,
+      sender_avatar: senderDisplayAvatar,
       message: inserted.message,
       attachment_path: inserted.attachment_path || null,
       attachment_url: inserted.attachment_path || null,

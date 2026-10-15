@@ -66,6 +66,7 @@ export default function AdminLayout({
     { label: 'Verifikasi Resep', href: '/admin/prescriptions', icon: FileCheck2, badge: pendingRxCount || undefined, highlight: true },
     { label: 'Meja Konsultasi Chat', href: '/admin/chat', icon: MessageSquare },
     { label: 'Data Pelanggan', href: '/admin/customers', icon: Users },
+    { label: 'Kelola Staf & Apoteker', href: '/admin/staff', icon: ShieldCheck },
     { label: 'Promo & Voucher', href: '/admin/promotions', icon: Tag },
     { label: 'Pengaturan Apotek', href: '/admin/store', icon: Store },
     { label: 'Laporan Penjualan', href: '/admin/reports', icon: BarChart3 },

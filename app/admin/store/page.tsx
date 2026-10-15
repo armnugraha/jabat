@@ -240,36 +240,6 @@ export default function AdminStoreSettingsPage() {
 
           <div>
             <label className="block font-bold text-slate-700 mb-1">
-              Nama Apoteker Penanggung Jawab *
-            </label>
-            <input
-              type="text"
-              required
-              value={settings.pharmacist_name}
-              onChange={(e) =>
-                setSettings({ ...settings, pharmacist_name: e.target.value })
-              }
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 font-semibold focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">
-              Nomor Surat Izin Praktik Apoteker (SIPA) *
-            </label>
-            <input
-              type="text"
-              required
-              value={settings.pharmacist_sipa}
-              onChange={(e) =>
-                setSettings({ ...settings, pharmacist_sipa: e.target.value })
-              }
-              className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-3 font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            />
-          </div>
-
-          <div>
-            <label className="block font-bold text-slate-700 mb-1">
               Nomor WhatsApp / Telepon Apotek
             </label>
             <input
