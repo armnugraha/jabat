@@ -75,7 +75,7 @@ export default function AdminLayout({
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col md:flex-row w-full max-w-none text-slate-900">
       {/* Sidebar for Desktop */}
-      <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white shrink-0 border-r border-slate-800">
+      <aside className="hidden md:flex flex-col w-64 bg-slate-900 text-white shrink-0 border-r border-slate-800 sticky top-0 h-screen z-40">
         {/* Pharmacy Branding */}
         <div className="p-4 border-b border-slate-800 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-500 flex items-center justify-center text-white shadow-md shadow-sky-500/30">
