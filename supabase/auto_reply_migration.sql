@@ -16,9 +16,13 @@ CREATE TABLE IF NOT EXISTS chat_auto_replies (
 CREATE TABLE IF NOT EXISTS chat_auto_reply_config (
     id TEXT PRIMARY KEY DEFAULT 'global',
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    fallback_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     fallback_message TEXT NOT NULL DEFAULT 'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Ensure fallback_enabled column exists if table was already created
+ALTER TABLE chat_auto_reply_config ADD COLUMN IF NOT EXISTS fallback_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Enable RLS
 ALTER TABLE chat_auto_replies ENABLE ROW LEVEL SECURITY;

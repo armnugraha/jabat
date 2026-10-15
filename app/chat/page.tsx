@@ -244,15 +244,15 @@ export default function ChatPage() {
 
       if (autoReplyConfig && autoReplyConfig.enabled !== false) {
         const lower = text.toLowerCase();
-        let replyMessage =
-          autoReplyConfig.fallback_message ||
-          'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.';
+        let replyMessage = '';
         let recProductId: string | undefined = undefined;
+        let shouldReply = false;
 
         // If user sent a photo/prescription without text
         if (currentAttachment && !text.trim()) {
           replyMessage =
             'Terima kasih telah mengunggah lampiran Kak. Apoteker kami akan segera meninjau foto resep / keluhan yang Anda kirimkan ya.';
+          shouldReply = true;
         } else {
           // Match against active keyword rules
           const matchedRule = (autoReplyConfig.rules || []).find(
@@ -265,30 +265,39 @@ export default function ChatPage() {
           if (matchedRule) {
             replyMessage = matchedRule.reply_message;
             recProductId = matchedRule.recommended_product_id || undefined;
+            shouldReply = true;
+          } else if (autoReplyConfig.fallback_enabled) {
+            // Hanya kirim pesan fallback jika settingan Pesan Default aktif (fallback_enabled: true)
+            replyMessage =
+              autoReplyConfig.fallback_message ||
+              'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.';
+            shouldReply = true;
           }
         }
 
-        // Natural typing pause
-        await new Promise((resolve) => setTimeout(resolve, 1100));
+        if (shouldReply && replyMessage) {
+          // Natural typing pause
+          await new Promise((resolve) => setTimeout(resolve, 1100));
 
-        // Save pharmacist response to API
-        const pharmRes = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.id,
-            conversationId: activeConvId || undefined,
-            senderRole: 'pharmacist',
-            senderName: 'apt. Siti Rahma, S.Farm.',
-            senderId: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
-            message: replyMessage,
-            recommendedProductId: recProductId,
-          }),
-        });
+          // Save pharmacist response to API
+          const pharmRes = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userId: user.id,
+              conversationId: activeConvId || undefined,
+              senderRole: 'pharmacist',
+              senderName: 'apt. Siti Rahma, S.Farm.',
+              senderId: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
+              message: replyMessage,
+              recommendedProductId: recProductId,
+            }),
+          });
 
-        const pharmJson = await pharmRes.json();
-        if (pharmJson.success && pharmJson.data) {
-          setMessages((prev) => [...prev, pharmJson.data]);
+          const pharmJson = await pharmRes.json();
+          if (pharmJson.success && pharmJson.data) {
+            setMessages((prev) => [...prev, pharmJson.data]);
+          }
         }
       }
     } catch (e) {

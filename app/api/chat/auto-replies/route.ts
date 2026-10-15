@@ -16,6 +16,7 @@ const noCacheHeaders = {
 // Default rules fallback (always ready even if migration hasn't been run yet)
 let inMemoryAutoReplyConfig = {
   enabled: true,
+  fallback_enabled: false,
   fallback_message:
     'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.',
   rules: [
@@ -87,7 +88,10 @@ export async function GET(request: Request) {
             {
               success: true,
               data: {
-                enabled: configRow ? configRow.enabled : inMemoryAutoReplyConfig.enabled,
+                enabled: configRow ? Boolean(configRow.enabled) : inMemoryAutoReplyConfig.enabled,
+                fallback_enabled: configRow && configRow.fallback_enabled !== undefined
+                  ? Boolean(configRow.fallback_enabled)
+                  : inMemoryAutoReplyConfig.fallback_enabled,
                 fallback_message: configRow
                   ? configRow.fallback_message
                   : inMemoryAutoReplyConfig.fallback_message,
@@ -121,10 +125,13 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { enabled, fallback_message, rules } = body;
+    const { enabled, fallback_enabled, fallback_message, rules } = body;
 
     if (enabled !== undefined) {
       inMemoryAutoReplyConfig.enabled = Boolean(enabled);
+    }
+    if (fallback_enabled !== undefined) {
+      inMemoryAutoReplyConfig.fallback_enabled = Boolean(fallback_enabled);
     }
     if (typeof fallback_message === 'string') {
       inMemoryAutoReplyConfig.fallback_message = fallback_message.trim();
@@ -149,12 +156,13 @@ export async function POST(request: Request) {
       try {
         const supabase = await getSupabaseAdminClient(request);
 
-        // Upsert config
+        // Upsert config with fallback_enabled
         await supabase
           .from('chat_auto_reply_config')
           .upsert({
             id: 'global',
             enabled: inMemoryAutoReplyConfig.enabled,
+            fallback_enabled: inMemoryAutoReplyConfig.fallback_enabled,
             fallback_message: inMemoryAutoReplyConfig.fallback_message,
             updated_at: new Date().toISOString(),
           });

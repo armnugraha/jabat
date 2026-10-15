@@ -225,6 +225,7 @@ export interface AutoReplyRule {
 
 export interface AutoReplyConfig {
   enabled: boolean;
+  fallback_enabled?: boolean;
   fallback_message: string;
   rules: AutoReplyRule[];
 }

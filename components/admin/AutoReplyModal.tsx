@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X,
   Bot,
@@ -26,8 +27,10 @@ interface AutoReplyModalProps {
 }
 
 export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProps) {
+  const [mounted, setMounted] = useState(false);
   const [config, setConfig] = useState<AutoReplyConfig>({
     enabled: true,
+    fallback_enabled: false,
     fallback_message:
       'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.',
     rules: [],
@@ -43,6 +46,10 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
   const [formReplyMessage, setFormReplyMessage] = useState('');
   const [formProductId, setFormProductId] = useState('');
   const [formIsActive, setFormIsActive] = useState(true);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Fetch settings on open
   useEffect(() => {
@@ -63,7 +70,7 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
       .finally(() => setIsLoading(false));
   }, [isOpen]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
   const handleStartAdd = () => {
     setEditingRuleId('new');
@@ -162,9 +169,14 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 w-screen h-screen min-h-screen z-[9999] bg-slate-950/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200 my-auto">
         {/* Modal Header */}
         <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/80">
           <div className="flex items-center gap-2.5">
@@ -230,20 +242,64 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
                 </button>
               </div>
 
-              {/* Default Fallback Message */}
-              <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-800 flex items-center justify-between">
-                  <span>Pesan Default (Jika tidak ada kata kunci yang cocok)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={config.fallback_message}
-                  onChange={(e) =>
-                    setConfig((prev) => ({ ...prev, fallback_message: e.target.value }))
-                  }
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
-                  placeholder="Ketik pesan standar yang dikirim bila pasien menanyakan hal di luar kata kunci..."
-                />
+              {/* Default Fallback Message with Dedicated ON/OFF Toggle */}
+              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <span>Pesan Default (Jika tidak ada kata kunci yang cocok)</span>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold ${
+                          config.fallback_enabled
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
+                      >
+                        {config.fallback_enabled ? 'Aktif' : 'Nonaktif'}
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      {config.fallback_enabled
+                        ? 'Bot otomatis membalas dengan teks berikut bila pesan pasien tidak cocok dengan kata kunci apapun.'
+                        : 'Nonaktif: Bot diam saat tidak ada kata kunci yang cocok, sehingga tidak mengganggu percakapan pasien dengan apoteker asli.'}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={() =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        fallback_enabled: !prev.fallback_enabled,
+                      }))
+                    }
+                    className="text-slate-700 hover:text-sky-600 transition shrink-0 ml-3"
+                    title={
+                      config.fallback_enabled
+                        ? 'Nonaktifkan Pesan Default'
+                        : 'Aktifkan Pesan Default'
+                    }
+                  >
+                    {config.fallback_enabled ? (
+                      <ToggleRight className="w-9 h-9 text-sky-600" />
+                    ) : (
+                      <ToggleLeft className="w-9 h-9 text-slate-400" />
+                    )}
+                  </button>
+                </div>
+
+                {config.fallback_enabled && (
+                  <div className="pt-2 border-t border-slate-200/80 animate-in fade-in">
+                    <textarea
+                      rows={2}
+                      value={config.fallback_message}
+                      onChange={(e) =>
+                        setConfig((prev) => ({ ...prev, fallback_message: e.target.value }))
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                      placeholder="Ketik pesan standar yang dikirim bila pasien menanyakan hal di luar kata kunci..."
+                    />
+                  </div>
+                )}
               </div>
 
               {/* Rules List Section */}
@@ -469,6 +525,7 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

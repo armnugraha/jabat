@@ -64,14 +64,31 @@ export default function AdminChatPage() {
       const res = await fetch('/api/chat?admin=true', { cache: 'no-store' });
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
-        setConversations(json.data);
+        // Jika ada percakapan yang sedang aktif dibuka, pastikan unread_count nya tetap 0
+        const updatedList = json.data.map((c: ConversationItem) =>
+          c.id === activeConvIdRef.current ? { ...c, unread_count: 0 } : c
+        );
+        setConversations(updatedList);
+
         // Auto-select first conversation if none selected
         setSelectedConversation((prev) => {
           if (prev) {
-            const updated = json.data.find((c: ConversationItem) => c.id === prev.id);
-            return updated || prev;
+            const updated = updatedList.find((c: ConversationItem) => c.id === prev.id);
+            return updated ? { ...updated, unread_count: 0 } : prev;
           }
-          return json.data.length > 0 ? json.data[0] : null;
+          if (updatedList.length > 0) {
+            const first = updatedList[0];
+            activeConvIdRef.current = first.id;
+            if (first.unread_count > 0) {
+              fetch('/api/chat', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ conversationId: first.id }),
+              }).catch(() => {});
+            }
+            return { ...first, unread_count: 0 };
+          }
+          return null;
         });
       }
     } catch (e) {
@@ -119,10 +136,26 @@ export default function AdminChatPage() {
     }
   }, []);
 
-  // Handle switching conversation with instant cache preview
+  // Handle switching conversation with instant cache preview & marking as read
   const handleSelectConversation = (conv: ConversationItem) => {
-    setSelectedConversation(conv);
     activeConvIdRef.current = conv.id;
+
+    // 1. Langsung hilangkan badge jumlah pesan baru pada percakapan yang dibuka
+    const openedConv: ConversationItem = { ...conv, unread_count: 0 };
+    setSelectedConversation(openedConv);
+
+    setConversations((prev) =>
+      prev.map((c) => (c.id === conv.id ? { ...c, unread_count: 0 } : c))
+    );
+
+    // 2. Kirim PATCH ke Supabase untuk menandai semua pesan percakapan ini sebagai terbaca (is_read = true)
+    if (conv.unread_count > 0) {
+      fetch('/api/chat', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conversationId: conv.id }),
+      }).catch((err) => console.warn('Failed to mark conversation as read:', err));
+    }
 
     const cached = messagesCacheRef.current[conv.id];
     if (cached && cached.length > 0) {
