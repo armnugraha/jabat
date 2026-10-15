@@ -191,6 +191,96 @@ export async function PUT(
   }
 }
 
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await params;
+    const body = await request.json();
+    const { variantId, stock, delta } = body;
+
+    if (!variantId) {
+      return NextResponse.json(
+        { success: false, error: 'variantId wajib disertakan' },
+        { status: 400 }
+      );
+    }
+
+    let finalStock = 0;
+
+    if (isSupabaseConfigured()) {
+      const supabase = await getSupabaseAdminClient(request);
+
+      // Fetch current variant
+      const { data: variant, error: varFetchErr } = await supabase
+        .from('product_variants')
+        .select('id, stock, name, product_id')
+        .eq('id', variantId)
+        .maybeSingle();
+
+      if (varFetchErr || !variant) {
+        return NextResponse.json(
+          { success: false, error: 'Varian produk tidak ditemukan di database.' },
+          { status: 404 }
+        );
+      }
+
+      if (typeof stock === 'number') {
+        finalStock = Math.max(0, Math.round(stock));
+      } else if (typeof delta === 'number') {
+        finalStock = Math.max(0, (Number(variant.stock) || 0) + Math.round(delta));
+      } else {
+        return NextResponse.json(
+          { success: false, error: 'stock atau delta wajib berupa angka' },
+          { status: 400 }
+        );
+      }
+
+      const { error: updateErr } = await supabase
+        .from('product_variants')
+        .update({ stock: finalStock })
+        .eq('id', variantId);
+
+      if (updateErr) {
+        console.error('Failed to update variant stock in Supabase:', updateErr);
+        return NextResponse.json(
+          { success: false, error: updateErr.message },
+          { status: 500 }
+        );
+      }
+    } else {
+      // Mock data fallback
+      const prod = mockProducts.find((p) => p.id === id);
+      const variant = prod?.variants.find((v) => v.id === variantId);
+      if (variant) {
+        if (typeof stock === 'number') {
+          variant.stock = Math.max(0, Math.round(stock));
+        } else if (typeof delta === 'number') {
+          variant.stock = Math.max(0, (variant.stock || 0) + Math.round(delta));
+        }
+        finalStock = variant.stock;
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: 'Stok varian berhasil diperbarui.',
+      data: {
+        productId: id,
+        variantId,
+        stock: finalStock,
+      },
+    });
+  } catch (err: any) {
+    console.error('PATCH /api/products/[id] error:', err);
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Gagal memperbarui stok' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -225,4 +315,5 @@ export async function DELETE(
     );
   }
 }
+
 

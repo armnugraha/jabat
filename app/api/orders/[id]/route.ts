@@ -99,6 +99,84 @@ export async function PUT(
 
     if (isSupabaseConfigured()) {
       const supabase = await getSupabaseAdminClient();
+
+      // 1. Ambil data pesanan saat ini untuk memeriksa status sebelumnya & mendapatkan ID pesanan
+      const { data: currentOrder } = await supabase
+        .from('orders')
+        .select('id, status')
+        .or(`id.eq.${id},order_number.eq.${id}`)
+        .maybeSingle();
+
+      const previousStatus = currentOrder?.status;
+      const orderDbId = currentOrder?.id || id;
+
+      const isNowConfirmed = status === 'confirmed' || status === 'preparing';
+      const wasAlreadyConfirmed =
+        previousStatus === 'confirmed' ||
+        previousStatus === 'preparing' ||
+        previousStatus === 'shipped' ||
+        previousStatus === 'delivered';
+
+      // 2. Jika status berubah menjadi confirmed (dan sebelumnya belum confirmed), kurangi stok varian obat
+      if (isNowConfirmed && !wasAlreadyConfirmed) {
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('variant_id, product_id, quantity')
+          .eq('order_id', orderDbId);
+
+        if (items && items.length > 0) {
+          for (const item of items) {
+            if (item.variant_id) {
+              const { data: v } = await supabase
+                .from('product_variants')
+                .select('id, stock')
+                .eq('id', item.variant_id)
+                .maybeSingle();
+
+              if (v) {
+                const currentStock = Number(v.stock) || 0;
+                const qtyToDeduct = Number(item.quantity) || 1;
+                const newStock = Math.max(0, currentStock - qtyToDeduct);
+
+                await supabase
+                  .from('product_variants')
+                  .update({ stock: newStock })
+                  .eq('id', item.variant_id);
+              }
+            }
+          }
+        }
+      } else if (status === 'cancelled' && wasAlreadyConfirmed) {
+        // Jika pesanan yang sudah dikonfirmasi dibatalkan, kembalikan stok obat
+        const { data: items } = await supabase
+          .from('order_items')
+          .select('variant_id, product_id, quantity')
+          .eq('order_id', orderDbId);
+
+        if (items && items.length > 0) {
+          for (const item of items) {
+            if (item.variant_id) {
+              const { data: v } = await supabase
+                .from('product_variants')
+                .select('id, stock')
+                .eq('id', item.variant_id)
+                .maybeSingle();
+
+              if (v) {
+                const currentStock = Number(v.stock) || 0;
+                const qtyToRestore = Number(item.quantity) || 1;
+                const newStock = currentStock + qtyToRestore;
+
+                await supabase
+                  .from('product_variants')
+                  .update({ stock: newStock })
+                  .eq('id', item.variant_id);
+              }
+            }
+          }
+        }
+      }
+
       await supabase
         .from('orders')
         .update(updates)
