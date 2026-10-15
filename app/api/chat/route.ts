@@ -24,29 +24,78 @@ function isValidUUID(val: any): boolean {
   );
 }
 
-function formatMessageRow(row: any) {
-  const isPharmacistOrAdmin =
-    row.sender?.role === 'pharmacist' ||
-    row.sender?.role === 'admin' ||
-    row.sender_id === DEFAULT_PHARMACIST_ID;
+// Fast and timeout-safe helper to fetch and format messages without slow recursive RLS joins
+async function fetchConversationMessages(supabase: any, convId: string, customerId?: string) {
+  // 1. Fetch raw messages directly from messages table (fast, no RLS timeout)
+  const { data: messages, error: msgError } = await supabase
+    .from('messages')
+    .select('id, conversation_id, sender_id, message, attachment_path, recommended_product_id, is_read, created_at')
+    .eq('conversation_id', convId)
+    .order('created_at', { ascending: true });
 
-  return {
-    id: row.id,
-    conversation_id: row.conversation_id,
-    sender_id: row.sender_id,
-    sender_name:
-      row.sender?.full_name ||
-      (isPharmacistOrAdmin ? DEFAULT_PHARMACIST_NAME : 'Pelanggan'),
-    sender_role: isPharmacistOrAdmin ? 'pharmacist' : 'customer',
-    sender_avatar: row.sender?.avatar_url || null,
-    message: row.message,
-    attachment_path: row.attachment_path || null,
-    attachment_url: row.attachment_path || null,
-    recommended_product: row.product || undefined,
-    is_read: row.is_read ?? true,
-    created_at: formatChatTime(row.created_at),
-    raw_created_at: row.created_at,
-  };
+  if (msgError) {
+    console.error('Fetch messages error:', msgError);
+    return [];
+  }
+
+  if (!messages || messages.length === 0) {
+    return [];
+  }
+
+  // 2. Resolve customer info if customerId provided
+  let customerProfile: any = null;
+  if (customerId) {
+    const { data: cust } = await supabase
+      .from('profiles')
+      .select('id, full_name, role, avatar_url')
+      .eq('id', customerId)
+      .maybeSingle();
+    customerProfile = cust;
+  }
+
+  // 3. Batch fetch recommended products if any message has one
+  const recProductIds = Array.from(
+    new Set(messages.map((m: any) => m.recommended_product_id).filter(Boolean))
+  );
+
+  const productMap = new Map<string, any>();
+  if (recProductIds.length > 0) {
+    const { data: prods } = await supabase
+      .from('products')
+      .select('id, name, image_url, variants:product_variants(id, price, stock)')
+      .in('id', recProductIds);
+
+    (prods || []).forEach((p: any) => productMap.set(p.id, p));
+  }
+
+  // 4. Map into standard ChatMessage structure
+  return messages.map((row: any) => {
+    const isCustomer = customerId ? row.sender_id === customerId : row.sender_id !== DEFAULT_PHARMACIST_ID;
+    const isPharmacist = !isCustomer || row.sender_id === DEFAULT_PHARMACIST_ID;
+
+    const senderName = isCustomer
+      ? (customerProfile?.full_name || 'Pelanggan')
+      : (isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Apoteker');
+
+    const senderRole = isCustomer ? 'customer' : 'pharmacist';
+    const senderAvatar = isCustomer ? (customerProfile?.avatar_url || null) : null;
+
+    return {
+      id: row.id,
+      conversation_id: row.conversation_id,
+      sender_id: row.sender_id,
+      sender_name: senderName,
+      sender_role: senderRole,
+      sender_avatar: senderAvatar,
+      message: row.message,
+      attachment_path: row.attachment_path || null,
+      attachment_url: row.attachment_path || null,
+      recommended_product: row.recommended_product_id ? productMap.get(row.recommended_product_id) : undefined,
+      is_read: row.is_read ?? true,
+      created_at: formatChatTime(row.created_at),
+      raw_created_at: row.created_at,
+    };
+  });
 }
 
 // GET /api/chat
@@ -118,25 +167,13 @@ export async function GET(request: Request) {
 
     // 2. Fetch specific conversation by conversationId
     if (conversationId && isValidUUID(conversationId)) {
-      const { data: messages, error: msgError } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          sender:profiles!sender_id (id, full_name, role, avatar_url),
-          product:products!recommended_product_id (*, variants:product_variants(*))
-        `)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: true });
+      const { data: conv } = await supabase
+        .from('conversations')
+        .select('id, customer_id')
+        .eq('id', conversationId)
+        .maybeSingle();
 
-      if (msgError) {
-        console.error('Supabase fetch conversation messages error:', msgError);
-        return NextResponse.json(
-          { success: false, error: msgError.message },
-          { status: 500, headers: noCacheHeaders }
-        );
-      }
-
-      const formatted = (messages || []).map(formatMessageRow);
+      const formatted = await fetchConversationMessages(supabase, conversationId, conv?.customer_id);
       return NextResponse.json(
         { success: true, conversationId, data: formatted },
         { headers: noCacheHeaders }
@@ -151,19 +188,51 @@ export async function GET(request: Request) {
       );
     }
 
-    // Find conversation for this user
-    let { data: conv, error: convFindErr } = await supabase
+    // Find conversation for this user - ALWAYS find all conversations for this customer
+    const { data: userConvs, error: convFindErr } = await supabase
       .from('conversations')
-      .select('id, customer_id, status, last_message_at')
+      .select('id, customer_id, status, last_message_at, created_at')
       .eq('customer_id', userId)
-      .maybeSingle();
+      .order('created_at', { ascending: false });
 
     if (convFindErr) {
       console.error('Supabase find conv error:', convFindErr);
     }
 
-    // If no conversation exists yet, create one in Supabase
-    if (!conv) {
+    let conv: any = null;
+
+    if (userConvs && userConvs.length > 0) {
+      if (userConvs.length === 1) {
+        conv = userConvs[0];
+      } else {
+        // If multiple conversations exist, find the one that has the most messages
+        const convIds = userConvs.map((c: any) => c.id);
+        const { data: msgSample } = await supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', convIds);
+
+        if (msgSample && msgSample.length > 0) {
+          const counts: Record<string, number> = {};
+          for (const m of msgSample) {
+            counts[m.conversation_id] = (counts[m.conversation_id] || 0) + 1;
+          }
+          let bestId = userConvs[0].id;
+          let bestCount = -1;
+          for (const c of userConvs) {
+            const count = counts[c.id] || 0;
+            if (count > bestCount) {
+              bestCount = count;
+              bestId = c.id;
+            }
+          }
+          conv = userConvs.find((c: any) => c.id === bestId) || userConvs[0];
+        } else {
+          conv = userConvs[0];
+        }
+      }
+    } else {
+      // ONLY create a new conversation if user has zero conversations in database
       const { data: newConv, error: newConvErr } = await supabase
         .from('conversations')
         .insert({ customer_id: userId, status: 'open' })
@@ -188,22 +257,10 @@ export async function GET(request: Request) {
 
     let formatted: any[] = [];
     if (conv) {
-      const { data: messages, error: msgError } = await supabase
-        .from('messages')
-        .select(`
-          *,
-          sender:profiles!sender_id (id, full_name, role, avatar_url),
-          product:products!recommended_product_id (*, variants:product_variants(*))
-        `)
-        .eq('conversation_id', conv.id)
-        .order('created_at', { ascending: true });
+      formatted = await fetchConversationMessages(supabase, conv.id, userId);
 
-      if (msgError) {
-        console.error('Supabase fetch messages error:', msgError);
-      } else if (messages && messages.length > 0) {
-        formatted = messages.map(formatMessageRow);
-      } else {
-        // If empty, insert welcome greeting
+      // If empty for some reason, seed welcome message
+      if (formatted.length === 0) {
         await supabase.from('messages').insert({
           conversation_id: conv.id,
           sender_id: DEFAULT_PHARMACIST_ID,
@@ -211,19 +268,7 @@ export async function GET(request: Request) {
             'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?',
           is_read: true,
         });
-
-        // re-fetch
-        const { data: refreshed } = await supabase
-          .from('messages')
-          .select(`
-            *,
-            sender:profiles!sender_id (id, full_name, role, avatar_url),
-            product:products!recommended_product_id (*, variants:product_variants(*))
-          `)
-          .eq('conversation_id', conv.id)
-          .order('created_at', { ascending: true });
-
-        formatted = (refreshed || []).map(formatMessageRow);
+        formatted = await fetchConversationMessages(supabase, conv.id, userId);
       }
     }
 
@@ -286,11 +331,38 @@ export async function POST(request: Request) {
         );
       }
 
-      let { data: conv } = await supabase
+      const { data: userConvs } = await supabase
         .from('conversations')
         .select('id')
         .eq('customer_id', userId)
-        .maybeSingle();
+        .order('created_at', { ascending: false });
+
+      let conv = userConvs && userConvs.length > 0 ? userConvs[0] : null;
+
+      if (userConvs && userConvs.length > 1) {
+        const convIds = userConvs.map((c: any) => c.id);
+        const { data: msgSample } = await supabase
+          .from('messages')
+          .select('conversation_id')
+          .in('conversation_id', convIds);
+
+        if (msgSample && msgSample.length > 0) {
+          const counts: Record<string, number> = {};
+          for (const m of msgSample) {
+            counts[m.conversation_id] = (counts[m.conversation_id] || 0) + 1;
+          }
+          let bestId = userConvs[0].id;
+          let bestCount = -1;
+          for (const c of userConvs) {
+            const count = counts[c.id] || 0;
+            if (count > bestCount) {
+              bestCount = count;
+              bestId = c.id;
+            }
+          }
+          conv = userConvs.find((c: any) => c.id === bestId) || userConvs[0];
+        }
+      }
 
       if (!conv) {
         const { data: newConv, error: newConvErr } = await supabase
@@ -330,7 +402,7 @@ export async function POST(request: Request) {
 
     const recProdId = isValidUUID(recommendedProductId) ? recommendedProductId : null;
 
-    // Insert message into Supabase
+    // Insert message into Supabase directly without heavy joins
     const { data: inserted, error: insertError } = await supabase
       .from('messages')
       .insert({
@@ -341,11 +413,7 @@ export async function POST(request: Request) {
         recommended_product_id: recProdId,
         is_read: false,
       })
-      .select(`
-        *,
-        sender:profiles!sender_id (id, full_name, role, avatar_url),
-        product:products!recommended_product_id (*, variants:product_variants(*))
-      `)
+      .select('id, conversation_id, sender_id, message, attachment_path, recommended_product_id, is_read, created_at')
       .single();
 
     if (insertError || !inserted) {
@@ -365,7 +433,32 @@ export async function POST(request: Request) {
       })
       .eq('id', convId);
 
-    const formatted = formatMessageRow(inserted);
+    // Fetch product details if recommended product attached
+    let recommendedProductObj: any = undefined;
+    if (recProdId) {
+      const { data: prod } = await supabase
+        .from('products')
+        .select('id, name, image_url, variants:product_variants(id, price, stock)')
+        .eq('id', recProdId)
+        .maybeSingle();
+      recommendedProductObj = prod || undefined;
+    }
+
+    const formatted = {
+      id: inserted.id,
+      conversation_id: inserted.conversation_id,
+      sender_id: inserted.sender_id,
+      sender_name: isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Pelanggan',
+      sender_role: isPharmacist ? 'pharmacist' : 'customer',
+      sender_avatar: null,
+      message: inserted.message,
+      attachment_path: inserted.attachment_path || null,
+      attachment_url: inserted.attachment_path || null,
+      recommended_product: recommendedProductObj,
+      is_read: inserted.is_read ?? false,
+      created_at: formatChatTime(inserted.created_at),
+      raw_created_at: inserted.created_at,
+    };
 
     return NextResponse.json(
       {
@@ -390,31 +483,50 @@ export async function PATCH(request: Request) {
     const { conversationId, userId } = body;
 
     if (!isSupabaseConfigured()) {
-      return NextResponse.json({ success: true }, { headers: noCacheHeaders });
+      return NextResponse.json(
+        { success: false, error: 'Database Supabase belum terkonfigurasi.' },
+        { status: 500, headers: noCacheHeaders }
+      );
     }
 
     const supabase = await getSupabaseAdminClient(request);
 
-    let convId = conversationId;
-    if (!convId && userId && isValidUUID(userId)) {
+    if (conversationId && isValidUUID(conversationId)) {
+      await supabase
+        .from('messages')
+        .update({ is_read: true })
+        .eq('conversation_id', conversationId);
+
+      return NextResponse.json({ success: true }, { headers: noCacheHeaders });
+    }
+
+    if (userId && isValidUUID(userId)) {
       const { data: conv } = await supabase
         .from('conversations')
         .select('id')
         .eq('customer_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle();
-      if (conv) convId = conv.id;
+
+      if (conv) {
+        await supabase
+          .from('messages')
+          .update({ is_read: true })
+          .eq('conversation_id', conv.id);
+      }
+
+      return NextResponse.json({ success: true }, { headers: noCacheHeaders });
     }
 
-    if (convId && isValidUUID(convId)) {
-      await supabase
-        .from('messages')
-        .update({ is_read: true })
-        .eq('conversation_id', convId)
-        .eq('is_read', false);
-    }
-
-    return NextResponse.json({ success: true }, { headers: noCacheHeaders });
+    return NextResponse.json(
+      { success: false, error: 'conversationId atau userId valid wajib disertakan.' },
+      { status: 400, headers: noCacheHeaders }
+    );
   } catch (err: any) {
-    return NextResponse.json({ success: false, error: err?.message }, { status: 500, headers: noCacheHeaders });
+    return NextResponse.json(
+      { success: false, error: err?.message || 'Gagal memperbarui status pesan.' },
+      { status: 500, headers: noCacheHeaders }
+    );
   }
 }
