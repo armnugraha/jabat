@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
+import { mockOrders, mockProducts } from '@/lib/data/mock-data';
+
+function isValidUUID(str: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
+}
 
 export async function GET(
   request: NextRequest,
@@ -12,25 +17,35 @@ export async function GET(
     if (isSupabaseConfigured()) {
       try {
         const supabase = await getSupabaseAdminClient();
-        let { data, error } = await supabase
+        let query = supabase
           .from('orders')
           .select(`
             *,
             customer:profiles!customer_id (id, full_name, phone),
             items:order_items(*)
-          `)
-          .or(`id.eq.${id},order_number.eq.${id}`)
-          .maybeSingle();
+          `);
+
+        if (isValidUUID(id)) {
+          query = query.eq('id', id);
+        } else {
+          query = query.eq('order_number', id);
+        }
+
+        let { data, error } = await query.maybeSingle();
 
         if (error || !data) {
-          const fallback = await supabase
+          let fallbackQuery = supabase
             .from('orders')
             .select(`
               *,
               items:order_items(*)
-            `)
-            .or(`id.eq.${id},order_number.eq.${id}`)
-            .maybeSingle();
+            `);
+          if (isValidUUID(id)) {
+            fallbackQuery = fallbackQuery.eq('id', id);
+          } else {
+            fallbackQuery = fallbackQuery.eq('order_number', id);
+          }
+          const fallback = await fallbackQuery.maybeSingle();
           if (fallback.data) {
             data = fallback.data;
           }
@@ -66,6 +81,15 @@ export async function GET(
       }
     }
 
+    // Fallback: check in-memory / mock orders
+    const mockOrder = mockOrders.find((o) => o.id === id || o.order_number === id);
+    if (mockOrder) {
+      return NextResponse.json({
+        success: true,
+        data: mockOrder,
+      });
+    }
+
     return NextResponse.json(
       { success: false, error: 'Pesanan tidak ditemukan.' },
       { status: 404 }
@@ -85,40 +109,50 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { status, prescriptionStatus, paymentStatus } = body;
+    const status = body.status;
+    const prescriptionStatus = body.prescriptionStatus || body.prescription_status;
+    const paymentStatus = body.paymentStatus || body.payment_status;
 
     const updates: any = { updated_at: new Date().toISOString() };
     if (status) updates.status = status;
     if (prescriptionStatus) updates.prescription_status = prescriptionStatus;
+
     if (paymentStatus) {
       updates.payment_status = paymentStatus;
     } else if (status === 'confirmed') {
       // Ketika pesanan dikonfirmasi oleh admin, otomatis set payment_status ke paid (lunas)
       updates.payment_status = 'paid';
+    } else if (status === 'cancelled') {
+      // Ketika pesanan dibatalkan, otomatis set payment_status ke cancelled (batal)
+      updates.payment_status = 'cancelled';
     }
+
+    const confirmedStatuses = ['confirmed', 'preparing', 'out_for_delivery', 'completed'];
 
     if (isSupabaseConfigured()) {
       const supabase = await getSupabaseAdminClient();
 
-      // 1. Ambil data pesanan saat ini untuk memeriksa status sebelumnya & mendapatkan ID pesanan
-      const { data: currentOrder } = await supabase
+      // 1. Ambil data pesanan saat ini untuk memeriksa status sebelumnya & ID pesanan database
+      let currentOrderQuery = supabase
         .from('orders')
-        .select('id, status')
-        .or(`id.eq.${id},order_number.eq.${id}`)
-        .maybeSingle();
+        .select('id, status, order_number');
+
+      if (isValidUUID(id)) {
+        currentOrderQuery = currentOrderQuery.eq('id', id);
+      } else {
+        currentOrderQuery = currentOrderQuery.eq('order_number', id);
+      }
+
+      const { data: currentOrder } = await currentOrderQuery.maybeSingle();
 
       const previousStatus = currentOrder?.status;
-      const orderDbId = currentOrder?.id || id;
+      const orderDbId = currentOrder?.id || (isValidUUID(id) ? id : null);
 
-      const isNowConfirmed = status === 'confirmed' || status === 'preparing';
-      const wasAlreadyConfirmed =
-        previousStatus === 'confirmed' ||
-        previousStatus === 'preparing' ||
-        previousStatus === 'shipped' ||
-        previousStatus === 'delivered';
+      const isNowConfirmed = status && confirmedStatuses.includes(status);
+      const wasAlreadyConfirmed = previousStatus && confirmedStatuses.includes(previousStatus);
 
       // 2. Jika status berubah menjadi confirmed (dan sebelumnya belum confirmed), kurangi stok varian obat
-      if (isNowConfirmed && !wasAlreadyConfirmed) {
+      if (isNowConfirmed && !wasAlreadyConfirmed && orderDbId) {
         const { data: items } = await supabase
           .from('order_items')
           .select('variant_id, product_id, quantity')
@@ -146,8 +180,8 @@ export async function PUT(
             }
           }
         }
-      } else if (status === 'cancelled' && wasAlreadyConfirmed) {
-        // Jika pesanan yang sudah dikonfirmasi dibatalkan, kembalikan stok obat
+      } else if (status === 'cancelled' && wasAlreadyConfirmed && orderDbId) {
+        // Jika pesanan yang sebelumnya sudah confirmed dibatalkan, kembalikan stok obat ke semula
         const { data: items } = await supabase
           .from('order_items')
           .select('variant_id, product_id, quantity')
@@ -177,10 +211,46 @@ export async function PUT(
         }
       }
 
-      await supabase
-        .from('orders')
-        .update(updates)
-        .or(`id.eq.${id},order_number.eq.${id}`);
+      // 3. Update orders record di Supabase
+      let orderUpdateQuery = supabase.from('orders').update(updates);
+      if (isValidUUID(id)) {
+        orderUpdateQuery = orderUpdateQuery.eq('id', id);
+      } else {
+        orderUpdateQuery = orderUpdateQuery.eq('order_number', id);
+      }
+      await orderUpdateQuery;
+    }
+
+    // Selalu sinkronkan juga ke mockOrders dan mockProducts untuk fallback local
+    const targetMock = mockOrders.find((o) => o.id === id || o.order_number === id);
+    if (targetMock) {
+      const prevStatus = targetMock.status;
+      const wasConfirmed = prevStatus && confirmedStatuses.includes(prevStatus);
+      const isConfirmed = status && confirmedStatuses.includes(status);
+
+      if (status) targetMock.status = status;
+      if (prescriptionStatus) targetMock.prescription_status = prescriptionStatus;
+      if (updates.payment_status) targetMock.payment_status = updates.payment_status;
+
+      if (isConfirmed && !wasConfirmed) {
+        for (const item of targetMock.items || []) {
+          for (const prod of mockProducts) {
+            const v = prod.variants.find((vr) => vr.id === item.variant_id);
+            if (v) {
+              v.stock = Math.max(0, (v.stock || 0) - (Number(item.quantity) || 1));
+            }
+          }
+        }
+      } else if (status === 'cancelled' && wasConfirmed) {
+        for (const item of targetMock.items || []) {
+          for (const prod of mockProducts) {
+            const v = prod.variants.find((vr) => vr.id === item.variant_id);
+            if (v) {
+              v.stock = (v.stock || 0) + (Number(item.quantity) || 1);
+            }
+          }
+        }
+      }
     }
 
     return NextResponse.json({
@@ -195,4 +265,3 @@ export async function PUT(
     );
   }
 }
-

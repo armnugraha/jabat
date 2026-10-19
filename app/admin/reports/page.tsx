@@ -24,10 +24,12 @@ export default function AdminReportsPage() {
   }, []);
 
   const totalRevenue = orders
-    .filter((o) => o.payment_status === 'paid')
+    .filter((o) => o.status !== 'cancelled' && o.payment_status === 'paid')
     .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
-  const completedOrders = orders.filter((o) => o.status === 'completed' || o.payment_status === 'paid');
+  const completedOrders = orders.filter(
+    (o) => o.status !== 'cancelled' && (o.status === 'completed' || o.payment_status === 'paid')
+  );
   const avgOrderValue = completedOrders.length > 0 ? Math.round(totalRevenue / completedOrders.length) : 0;
 
   return (

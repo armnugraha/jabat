@@ -16,11 +16,11 @@ export async function GET() {
       // Fetch customer orders for aggregations
       const { data: orders } = await supabase
         .from('orders')
-        .select('id, customer_id, total, created_at');
+        .select('id, customer_id, total, status, created_at');
 
       if (!profileErr && profiles && profiles.length > 0) {
         const aggregated = profiles.map((p) => {
-          const userOrders = (orders || []).filter((o) => o.customer_id === p.id);
+          const userOrders = (orders || []).filter((o) => o.customer_id === p.id && o.status !== 'cancelled');
           const totalSpend = userOrders.reduce((sum, o) => sum + (Number(o.total) || 0), 0);
           const lastOrderDate = userOrders.length > 0 ? userOrders[0].created_at : p.created_at;
 

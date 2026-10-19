@@ -42,11 +42,11 @@ export default function AdminDashboardPage() {
   }, []);
 
   const pendingPrescriptionsCount = orders.filter(
-    (o) => o.requires_prescription && o.prescription_status === 'pending'
+    (o) => o.status !== 'cancelled' && o.requires_prescription && o.prescription_status === 'pending'
   ).length;
 
   const todayRevenue = orders
-    .filter((o) => o.payment_status === 'paid')
+    .filter((o) => o.status !== 'cancelled' && o.payment_status === 'paid')
     .reduce((sum, o) => sum + Number(o.total || 0), 0);
 
   const stats = [

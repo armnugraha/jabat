@@ -96,6 +96,12 @@ export default function AdminOrdersPage() {
     const orderId = confirmModal.order.id;
     const newStatus = confirmModal.targetStatus;
     const willBePaid = newStatus === 'confirmed';
+    const isCancel = newStatus === 'cancelled';
+    const newPaymentStatus = isCancel
+      ? 'cancelled'
+      : willBePaid && confirmModal.order.payment_status === 'waiting_confirmation'
+      ? 'paid'
+      : confirmModal.order.payment_status;
 
     setConfirmModal((prev) => ({ ...prev, isSubmitting: true }));
 
@@ -106,7 +112,7 @@ export default function AdminOrdersPage() {
           return {
             ...ord,
             status: newStatus,
-            payment_status: willBePaid && ord.payment_status === 'waiting_confirmation' ? 'paid' : ord.payment_status,
+            payment_status: newPaymentStatus,
           };
         }
         return ord;
@@ -120,7 +126,7 @@ export default function AdminOrdersPage() {
           ? {
               ...prev,
               status: newStatus,
-              payment_status: willBePaid && prev.payment_status === 'waiting_confirmation' ? 'paid' : prev.payment_status,
+              payment_status: newPaymentStatus,
             }
           : null
       );
@@ -132,7 +138,7 @@ export default function AdminOrdersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           status: newStatus,
-          paymentStatus: willBePaid ? 'paid' : undefined,
+          paymentStatus: isCancel ? 'cancelled' : willBePaid ? 'paid' : undefined,
         }),
       });
     } catch (err) {
