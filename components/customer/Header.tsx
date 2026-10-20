@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ShoppingBag, ShieldCheck, MapPin, Clock, Home, Pill, FileText, MessageSquare, User, LayoutDashboard, Boxes } from 'lucide-react';
+import { ShoppingBag, ShieldCheck, MapPin, Clock, Home, Pill, FileText, MessageSquare, User, LayoutDashboard } from 'lucide-react';
 import { useCart } from '@/lib/store/cart-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { StoreSettings } from '@/lib/types';
@@ -42,7 +42,6 @@ export const Header: React.FC<HeaderProps> = ({
   const navLinks = [
     { label: 'Beranda', href: '/', icon: Home, isActive: pathname === '/' },
     { label: 'Katalog Obat', href: '/products', icon: Pill, isActive: pathname.startsWith('/products') },
-    { label: 'Paket Bundling', href: '/bundles', icon: Boxes, isActive: pathname.startsWith('/bundles') },
     { label: 'Riwayat Pesanan', href: '/orders', icon: FileText, isActive: pathname.startsWith('/orders') },
     { label: 'Konsultasi Apoteker', href: '/chat', icon: MessageSquare, isActive: pathname.startsWith('/chat') },
     { label: 'Akun Saya', href: '/account', icon: User, isActive: pathname.startsWith('/account') },
