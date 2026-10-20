@@ -41,6 +41,29 @@ import {
   exportSingleInvoiceToPDF,
 } from '@/lib/export-invoices';
 
+const MONTH_NAMES = [
+  'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+  'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+];
+
+const MONTH_SHORT = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun',
+  'Jul', 'Ags', 'Sep', 'Okt', 'Nov', 'Des'
+];
+
+function formatCompactRupiah(val: number): string {
+  if (val >= 1_000_000_000) {
+    return `Rp ${(val / 1_000_000_000).toFixed(1)} M`;
+  }
+  if (val >= 1_000_000) {
+    return `Rp ${(val / 1_000_000).toFixed(1)} jt`;
+  }
+  if (val >= 1_000) {
+    return `Rp ${Math.round(val / 1_000)} rb`;
+  }
+  return `Rp ${val}`;
+}
+
 export default function AdminReportsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
@@ -52,6 +75,12 @@ export default function AdminReportsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'success' | 'cancelled' | 'in_progress'>('all');
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | '7days' | '30days' | 'this_month'>('all');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'qris' | 'bank_transfer' | 'cod'>('all');
+
+  // Bar Chart states (1, 3, 6, 12 bulan & tahun)
+  const [chartPeriod, setChartPeriod] = useState<'1' | '3' | '6' | '12'>('12');
+  const [chartYear, setChartYear] = useState<number>(new Date().getFullYear());
+  const [chartMonth, setChartMonth] = useState<number>(new Date().getMonth());
+  const [activeBar, setActiveBar] = useState<string | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -97,6 +126,143 @@ export default function AdminReportsPage() {
   const totalCancelledCount = useMemo(() => {
     return orders.filter((o) => o.status === 'cancelled' || o.payment_status === 'cancelled').length;
   }, [orders]);
+
+  // Discover available years from orders
+  const availableYears = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    const yearsSet = new Set<number>([currentYear, currentYear - 1]);
+    orders.forEach((o) => {
+      if (o.created_at) {
+        const y = new Date(o.created_at).getFullYear();
+        if (!isNaN(y)) yearsSet.add(y);
+      }
+    });
+    return Array.from(yearsSet).sort((a, b) => b - a);
+  }, [orders]);
+
+  // Calculate monthly / weekly revenue chart data
+  const chartData = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonthIdx = now.getMonth();
+
+    // Valid revenue orders (paid and not cancelled)
+    const validOrders = orders.filter(
+      (o) => o.status !== 'cancelled' && o.payment_status === 'paid' && o.created_at
+    );
+
+    if (chartPeriod === '1') {
+      const daysInMonth = new Date(chartYear, chartMonth + 1, 0).getDate();
+      const weeks = [
+        { label: 'Minggu 1', range: '1-7', startDay: 1, endDay: 7 },
+        { label: 'Minggu 2', range: '8-14', startDay: 8, endDay: 14 },
+        { label: 'Minggu 3', range: '15-21', startDay: 15, endDay: 21 },
+        { label: 'Minggu 4', range: '22-28', startDay: 22, endDay: 28 },
+        { label: 'Minggu 5', range: `29-${daysInMonth}`, startDay: 29, endDay: daysInMonth },
+      ];
+
+      const bars = weeks.map((w, idx) => {
+        const ordersInWeek = validOrders.filter((o) => {
+          const d = new Date(o.created_at);
+          return (
+            d.getFullYear() === chartYear &&
+            d.getMonth() === chartMonth &&
+            d.getDate() >= w.startDay &&
+            d.getDate() <= w.endDay
+          );
+        });
+
+        const rev = ordersInWeek.reduce((sum, o) => sum + Number(o.total || 0), 0);
+        const isCurrent =
+          chartYear === currentYear &&
+          chartMonth === currentMonthIdx &&
+          now.getDate() >= w.startDay &&
+          now.getDate() <= w.endDay;
+
+        return {
+          id: `week-${idx}`,
+          label: w.label,
+          subLabel: `Tgl ${w.range}`,
+          fullDateLabel: `${w.label} (Tgl ${w.range} ${MONTH_NAMES[chartMonth]} ${chartYear})`,
+          revenue: rev,
+          orderCount: ordersInWeek.length,
+          isCurrent,
+        };
+      });
+
+      const totalRev = bars.reduce((s, b) => s + b.revenue, 0);
+      const totalOrders = bars.reduce((s, b) => s + b.orderCount, 0);
+      const maxRev = Math.max(...bars.map((b) => b.revenue), 100000);
+      const peakBar = [...bars].sort((a, b) => b.revenue - a.revenue)[0];
+
+      return {
+        title: `Pendapatan Bulan ${MONTH_NAMES[chartMonth]} ${chartYear}`,
+        periodLabel: `Bulan ${MONTH_NAMES[chartMonth]} ${chartYear}`,
+        bars,
+        totalRevenue: totalRev,
+        avgRevenue: totalRev > 0 ? Math.round(totalRev / bars.length) : 0,
+        totalOrders,
+        maxRevenue: maxRev,
+        peakBar: peakBar && peakBar.revenue > 0 ? peakBar : null,
+      };
+    }
+
+    // 3, 6, 12 Bulan mode
+    let monthIndices: number[] = [];
+    if (chartPeriod === '12') {
+      monthIndices = Array.from({ length: 12 }, (_, i) => i);
+    } else if (chartPeriod === '6') {
+      const endM = chartYear === currentYear ? currentMonthIdx : 11;
+      const startM = Math.max(0, endM - 5);
+      monthIndices = Array.from({ length: endM - startM + 1 }, (_, i) => startM + i);
+      while (monthIndices.length < 6 && monthIndices[0] > 0) {
+        monthIndices.unshift(monthIndices[0] - 1);
+      }
+    } else if (chartPeriod === '3') {
+      const endM = chartYear === currentYear ? currentMonthIdx : 11;
+      const startM = Math.max(0, endM - 2);
+      monthIndices = Array.from({ length: endM - startM + 1 }, (_, i) => startM + i);
+      while (monthIndices.length < 3 && monthIndices[0] > 0) {
+        monthIndices.unshift(monthIndices[0] - 1);
+      }
+    }
+
+    const bars = monthIndices.map((mIdx) => {
+      const ordersInMonth = validOrders.filter((o) => {
+        const d = new Date(o.created_at);
+        return d.getFullYear() === chartYear && d.getMonth() === mIdx;
+      });
+
+      const rev = ordersInMonth.reduce((sum, o) => sum + Number(o.total || 0), 0);
+      const isCurrent = chartYear === currentYear && mIdx === currentMonthIdx;
+
+      return {
+        id: `month-${mIdx}`,
+        label: MONTH_SHORT[mIdx],
+        subLabel: `${mIdx + 1}`,
+        fullDateLabel: `${MONTH_NAMES[mIdx]} ${chartYear}`,
+        revenue: rev,
+        orderCount: ordersInMonth.length,
+        isCurrent,
+      };
+    });
+
+    const totalRev = bars.reduce((s, b) => s + b.revenue, 0);
+    const totalOrders = bars.reduce((s, b) => s + b.orderCount, 0);
+    const maxRev = Math.max(...bars.map((b) => b.revenue), 100000);
+    const peakBar = [...bars].sort((a, b) => b.revenue - a.revenue)[0];
+
+    return {
+      title: `Pendapatan Bulanan Tahun ${chartYear}`,
+      periodLabel: `${chartPeriod} Bulan (${bars[0]?.label} - ${bars[bars.length - 1]?.label} ${chartYear})`,
+      bars,
+      totalRevenue: totalRev,
+      avgRevenue: bars.length > 0 ? Math.round(totalRev / bars.length) : 0,
+      totalOrders,
+      maxRevenue: maxRev,
+      peakBar: peakBar && peakBar.revenue > 0 ? peakBar : null,
+    };
+  }, [orders, chartPeriod, chartYear, chartMonth]);
 
   // Filtering invoices logic
   const filteredOrders = useMemo(() => {
@@ -305,6 +471,242 @@ export default function AdminReportsPage() {
               <span className="text-xs text-rose-600 font-bold mt-1 inline-block">
                 Stok aman & tidak masuk omzet
               </span>
+            </div>
+          </div>
+
+          {/* ============================================================== */}
+          {/* GRAFIK BATANG TOTAL PENDAPATAN BULANAN (FILTER 1, 3, 6, 12 BULAN & TAHUN) */}
+          {/* ============================================================== */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-5 sm:p-6 shadow-stitch space-y-5">
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-full bg-sky-50 text-sky-700 font-bold text-[10px] uppercase tracking-wider border border-sky-200/80 flex items-center gap-1.5">
+                    <TrendingUp className="w-3 h-3 text-sky-600" />
+                    <span>Analisis Omzet Penjualan</span>
+                  </span>
+                  <span className="text-slate-400 text-xs">•</span>
+                  <span className="text-xs font-bold text-slate-600">
+                    {chartData.periodLabel}
+                  </span>
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900 mt-1">
+                  Grafik Batang Total Pendapatan
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Total akumulasi omzet penjualan lunas per bulan (pesanan dibatalkan tidak dihitung)
+                </p>
+              </div>
+
+              {/* Filter Controls: Period (1, 3, 6, 12 bulan) & Year Selector */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* 1, 3, 6, 12 Bulan Buttons */}
+                <div className="flex items-center bg-slate-100/90 p-1 rounded-2xl border border-slate-200/70 shadow-2xs">
+                  {(['1', '3', '6', '12'] as const).map((p) => {
+                    const isActive = chartPeriod === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setChartPeriod(p)}
+                        className={`px-3 py-1.5 rounded-xl font-bold text-xs transition cursor-pointer select-none ${
+                          isActive
+                            ? 'bg-sky-600 text-white shadow-xs'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
+                        }`}
+                      >
+                        {p} Bulan
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Month dropdown (shown only if 1 Bulan is selected) */}
+                {chartPeriod === '1' && (
+                  <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-1.5 shadow-2xs">
+                    <span className="text-[11px] font-bold text-slate-500">Bulan:</span>
+                    <select
+                      value={chartMonth}
+                      onChange={(e) => setChartMonth(Number(e.target.value))}
+                      className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                    >
+                      {MONTH_NAMES.map((name, idx) => (
+                        <option key={idx} value={idx}>
+                          {name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Year Filter Dropdown */}
+                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-2xl px-3 py-1.5 shadow-2xs">
+                  <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                  <span className="text-[11px] font-bold text-slate-500">Tahun:</span>
+                  <select
+                    value={chartYear}
+                    onChange={(e) => setChartYear(Number(e.target.value))}
+                    className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer"
+                  >
+                    {availableYears.map((yr) => (
+                      <option key={yr} value={yr}>
+                        {yr}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Metrics Summary Strip */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/60">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Total Pendapatan
+                </span>
+                <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                  {formatRupiah(chartData.totalRevenue)}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  {chartPeriod === '1' ? 'Rata-rata / Minggu' : 'Rata-rata / Bulan'}
+                </span>
+                <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                  {formatRupiah(chartData.avgRevenue)}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  {chartPeriod === '1' ? 'Minggu Tertinggi' : 'Bulan Tertinggi'}
+                </span>
+                <span className="text-sm sm:text-base font-extrabold text-emerald-700">
+                  {chartData.peakBar ? `${chartData.peakBar.label} (${formatCompactRupiah(chartData.peakBar.revenue)})` : '-'}
+                </span>
+              </div>
+
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                  Transaksi Lunas
+                </span>
+                <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                  {chartData.totalOrders} Pesanan
+                </span>
+              </div>
+            </div>
+
+            {/* Bar Chart Visualization */}
+            <div className="pt-2">
+              {/* Y-Axis scale label */}
+              <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 pb-2 px-1">
+                <span>Skala Maksimal: {formatRupiah(chartData.maxRevenue)}</span>
+                <div className="flex items-center gap-3">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-sky-500 inline-block" />
+                    <span>Omzet Penjualan</span>
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+                    <span>Omzet Tertinggi</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Chart Stage */}
+              <div className="relative h-64 sm:h-72 w-full pt-8 pb-8 px-2 flex items-end justify-between gap-1 sm:gap-3 border-b border-slate-200">
+                {/* Horizontal Guideline Lines */}
+                <div className="absolute inset-x-0 top-8 border-b border-dashed border-slate-200/80 pointer-events-none" />
+                <div className="absolute inset-x-0 top-1/2 border-b border-dashed border-slate-200/80 pointer-events-none" />
+                <div className="absolute inset-x-0 bottom-8 border-b border-slate-200 pointer-events-none" />
+
+                {/* Bars */}
+                {chartData.bars.map((bar) => {
+                  const isPeak = chartData.peakBar?.id === bar.id && bar.revenue > 0;
+                  const heightPercent =
+                    chartData.maxRevenue > 0
+                      ? Math.min(100, Math.max(0, (bar.revenue / chartData.maxRevenue) * 100))
+                      : 0;
+                  const isHovered = activeBar === bar.id;
+
+                  return (
+                    <div
+                      key={bar.id}
+                      onMouseEnter={() => setActiveBar(bar.id)}
+                      onMouseLeave={() => setActiveBar(null)}
+                      onClick={() => setActiveBar(activeBar === bar.id ? null : bar.id)}
+                      className="flex-1 h-full flex flex-col items-center justify-end relative group cursor-pointer z-10"
+                    >
+                      {/* Tooltip Popup on Hover / Active */}
+                      {isHovered && (
+                        <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-slate-900 text-white rounded-xl py-1.5 px-3 shadow-xl text-[11px] font-bold z-30 whitespace-nowrap animate-in fade-in zoom-in-95 pointer-events-none">
+                          <div className="text-[10px] text-slate-300 font-medium">{bar.fullDateLabel}</div>
+                          <div className="text-emerald-400 font-extrabold">{formatRupiah(bar.revenue)}</div>
+                          <div className="text-[9px] text-slate-400">{bar.orderCount} transaksi lunas</div>
+                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
+                        </div>
+                      )}
+
+                      {/* Value label on top of bar */}
+                      <div
+                        className={`text-[9px] sm:text-[10px] font-bold mb-1 transition-all ${
+                          bar.revenue > 0
+                            ? isPeak
+                              ? 'text-emerald-700 font-extrabold'
+                              : 'text-sky-700'
+                            : 'text-slate-300 opacity-0 group-hover:opacity-100'
+                        }`}
+                      >
+                        {bar.revenue > 0 ? formatCompactRupiah(bar.revenue) : 'Rp 0'}
+                      </div>
+
+                      {/* The Bar Pillar */}
+                      <div className="w-full max-w-[48px] h-full flex items-end justify-center bg-slate-100/60 rounded-t-xl overflow-hidden p-0.5">
+                        <div
+                          style={{ height: `${bar.revenue > 0 ? Math.max(heightPercent, 6) : 2}%` }}
+                          className={`w-full rounded-t-lg transition-all duration-500 ease-out ${
+                            bar.revenue > 0
+                              ? isPeak
+                                ? 'bg-gradient-to-t from-emerald-600 via-emerald-500 to-emerald-400 group-hover:brightness-110 shadow-sm shadow-emerald-500/20'
+                                : 'bg-gradient-to-t from-sky-600 via-sky-500 to-sky-400 group-hover:brightness-110 shadow-sm shadow-sky-500/20'
+                              : 'bg-slate-300/80 group-hover:bg-slate-400'
+                          }`}
+                        />
+                      </div>
+
+                      {/* X-Axis Month / Week Label */}
+                      <div className="mt-2 text-center">
+                        <span
+                          className={`text-[10px] sm:text-xs font-bold block transition ${
+                            bar.isCurrent
+                              ? 'text-sky-700 underline decoration-sky-500 decoration-2 font-black'
+                              : 'text-slate-600 group-hover:text-slate-900'
+                          }`}
+                        >
+                          {bar.label}
+                        </span>
+                        {bar.subLabel && chartPeriod === '1' && (
+                          <span className="text-[8px] text-slate-400 block -mt-0.5 whitespace-nowrap">
+                            {bar.subLabel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Chart Footer Note */}
+              <div className="flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-400 pt-2 px-1 gap-1">
+                <span>
+                  Arahkan kursor atau klik pada batang grafik untuk melihat detail nominal dan transaksi.
+                </span>
+                <span className="text-[10px] font-medium text-slate-500">
+                  Perhitungan realtime dari transaksi berstatus lunas.
+                </span>
+              </div>
             </div>
           </div>
 
