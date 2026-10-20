@@ -20,7 +20,7 @@ export const HeroBanner: React.FC = () => {
           Kebutuhan Kesehatan Keluarga, Lebih Praktis & Aman.
         </h2>
         <p className="text-xs md:text-sm text-sky-100 leading-relaxed mb-4">
-          Dapatkan obat resmi BPOM, suplemen kesehatan, atau konsultasi gratis dengan Apoteker Penanggung Jawab kami langsung ke rumah.
+          Dapatkan obat resmi BPOM, suplemen kesehatan, atau konsultasi gratis dengan Tenaga Teknis Kefarmasian Penanggung Jawab kami langsung ke rumah.
         </p>
         <Link
           href="/products"
