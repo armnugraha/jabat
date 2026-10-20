@@ -21,6 +21,7 @@ import {
   Sparkles,
   ArrowLeft,
   ChevronRight,
+  Boxes,
 } from 'lucide-react';
 import { UserAvatar } from '@/components/customer/UserAvatar';
 import { useAuth } from '@/lib/store/auth-context';
@@ -62,6 +63,7 @@ export default function AdminLayout({
     { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
     { label: 'Kelola Obat & Produk', href: '/admin/products', icon: Package },
     { label: 'Kategori Obat', href: '/admin/categories', icon: FolderTree },
+    { label: 'Paket Bundling', href: '/admin/bundling', icon: Boxes },
     { label: 'Pesanan Masuk', href: '/admin/orders', icon: ShoppingBag, badge: pendingOrdersCount || undefined },
     { label: 'Verifikasi Resep', href: '/admin/prescriptions', icon: FileCheck2, badge: pendingRxCount || undefined, highlight: true },
     { label: 'Meja Konsultasi Chat', href: '/admin/chat', icon: MessageSquare },

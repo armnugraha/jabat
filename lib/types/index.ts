@@ -114,12 +114,44 @@ export interface Promotion {
   banner_image?: string;
 }
 
+export interface BundlingItem {
+  id: string;
+  bundle_id?: string;
+  product_id: string;
+  variant_id: string;
+  quantity: number;
+  product?: Product;
+  variant?: ProductVariant;
+}
+
+export interface BundlingPackage {
+  id: string;
+  name: string;
+  slug: string;
+  category: string; // e.g., 'Ibu Hamil', 'Ibu Menyusui', 'Kesehatan Otak', etc.
+  description: string;
+  image_url?: string;
+  original_price: number;
+  bundle_price: number;
+  savings_amount: number;
+  savings_percentage: number;
+  badge?: string;
+  is_active: boolean;
+  display_order: number;
+  items: BundlingItem[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface CartItem {
-  id: string; // cart item unique key (e.g. `${product.id}-${variant.id}`)
+  id: string; // cart item unique key (e.g. `${product.id}-${variant.id}` or `bundle-${bundle.id}`)
   product: Product;
   variant: ProductVariant;
   quantity: number;
   selected: boolean;
+  is_bundle?: boolean;
+  bundle?: BundlingPackage;
+  bundle_name?: string;
 }
 
 export interface OrderItem {

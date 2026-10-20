@@ -30,6 +30,7 @@ import {
   AlertCircle,
   Loader2,
   Copy,
+  Package,
 } from 'lucide-react';
 import { useCart } from '@/lib/store/cart-context';
 import { useAuth } from '@/lib/store/auth-context';
@@ -412,46 +413,104 @@ export default function CartPage() {
                         </button>
 
                         {/* Thumbnail Image */}
-                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-50 border border-slate-100 p-1.5 shrink-0 overflow-hidden flex items-center justify-center">
+                        <div className="relative w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-50 border border-slate-100 p-1.5 shrink-0 overflow-hidden flex items-center justify-center">
                           <img
                             src={item.product.image_url}
                             alt={item.product.name}
                             className="w-full h-full object-contain mix-blend-multiply"
                           />
+                          {item.is_bundle && (
+                            <div className="absolute bottom-1 right-1 bg-amber-500 text-white p-1 rounded-lg shadow-xs">
+                              <Package className="w-3 h-3" />
+                            </div>
+                          )}
                         </div>
 
                         {/* Item Details */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <span
-                              className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                                isPrescription
-                                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              }`}
-                            >
-                              • {isPrescription ? 'Wajib Resep' : 'Obat Bebas'}
-                            </span>
-                            <span className="text-[10px] text-slate-400 font-medium truncate">
-                              • {item.product.manufacturer || 'Kimia Farma'}
-                            </span>
+                            {item.is_bundle ? (
+                              <>
+                                <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-white flex items-center gap-1 shadow-2xs">
+                                  <Package className="w-3 h-3" />
+                                  Paket Bundling
+                                </span>
+                                {item.bundle?.category && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                                    {item.bundle.category}
+                                  </span>
+                                )}
+                                {item.variant.strike_price && item.variant.strike_price > item.variant.price && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
+                                    Hemat {Math.round(((item.variant.strike_price - item.variant.price) / item.variant.strike_price) * 100)}%
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                {item.bundle_name && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+                                    📦 {item.bundle_name}
+                                  </span>
+                                )}
+                                <span
+                                  className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                    isPrescription
+                                      ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                      : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                  }`}
+                                >
+                                  • {isPrescription ? 'Wajib Resep' : 'Obat Bebas'}
+                                </span>
+                                <span className="text-[10px] text-slate-400 font-medium truncate">
+                                  • {item.product.manufacturer || 'Kimia Farma'}
+                                </span>
+                              </>
+                            )}
                           </div>
 
                           <h4 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-1">
                             {item.product.name}
                           </h4>
-                          <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                            Kemasan: <strong className="text-slate-700">{item.variant.name}</strong> ({item.variant.quantity_per_package} {item.variant.unit}) • Sisa Stok: {item.variant.stock}
-                          </p>
 
-                          <div className="flex items-baseline gap-1.5 mt-1.5">
+                          {item.is_bundle ? (
+                            <div className="mt-2 p-2 rounded-xl bg-amber-50/60 border border-amber-100 text-[10px] text-slate-700 space-y-1">
+                              <div className="font-bold text-amber-900 flex items-center gap-1 text-[10px]">
+                                <Package className="w-3 h-3 text-amber-600" />
+                                <span>Isi Paket ({item.bundle?.items?.length || 0} macam produk):</span>
+                              </div>
+                              <div className="space-y-0.5 pl-1">
+                                {item.bundle?.items?.map((bItem, bIdx) => (
+                                  <div key={bIdx} className="flex items-center justify-between text-[10px] text-slate-600">
+                                    <span className="truncate">
+                                      • <strong className="text-amber-800">{bItem.quantity}x</strong> {bItem.product?.name || 'Produk'}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 shrink-0 ml-2">
+                                      {bItem.variant?.name || 'Varian'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 mt-0.5">
+                              Kemasan: <strong className="text-slate-700">{item.variant.name}</strong> ({item.variant.quantity_per_package} {item.variant.unit}) • Sisa Stok: {item.variant.stock}
+                            </p>
+                          )}
+
+                          <div className="flex items-baseline gap-1.5 mt-2 flex-wrap">
                             <span className="text-xs sm:text-sm font-extrabold text-sky-700">
                               {formatRupiah(item.variant.price)}
                             </span>
-                            {item.variant.strike_price && (
-                              <span className="text-[10px] text-slate-400 line-through">
-                                {formatRupiah(item.variant.strike_price)}
-                              </span>
+                            {item.variant.strike_price && item.variant.strike_price > item.variant.price && (
+                              <>
+                                <span className="text-[10px] text-slate-400 line-through">
+                                  {formatRupiah(item.variant.strike_price)}
+                                </span>
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                  Hemat {formatRupiah(item.variant.strike_price - item.variant.price)}
+                                </span>
+                              </>
                             )}
                           </div>
                         </div>

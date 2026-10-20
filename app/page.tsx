@@ -14,6 +14,7 @@ import {
 } from '@/components/customer/PromoBanners';
 import { CategoryGrid } from '@/components/customer/CategoryGrid';
 import { ProductCard } from '@/components/customer/ProductCard';
+import { BundlingSection } from '@/components/customer/BundlingSection';
 import { Product, Category } from '@/lib/types';
 import { mockProducts, mockCategories } from '@/lib/data/mock-data';
 
@@ -102,6 +103,9 @@ export default function HomePage() {
           <FreeShippingBanner />
           <PharmacistConsultationCTA />
         </div>
+
+        {/* Paket Bundling Kategori (Ibu Hamil, Ibu Menyusui, Kesehatan Otak, dll) */}
+        <BundlingSection limit={4} />
 
         {/* Featured Products Section (API Data) */}
         <div>

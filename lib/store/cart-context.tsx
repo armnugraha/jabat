@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, ProductVariant, CartItem, DeliveryOption, PaymentMethod, Promotion, StoreSettings } from '../types';
+import { Product, ProductVariant, CartItem, DeliveryOption, PaymentMethod, Promotion, StoreSettings, BundlingPackage } from '../types';
 import { mockPromotions, mockStoreSettings } from '../data/mock-data';
 
 import { useAuth } from './auth-context';
@@ -9,7 +9,8 @@ import { useAuth } from './auth-context';
 interface CartContextType {
   items: CartItem[];
   isLoaded: boolean;
-  addItem: (product: Product, variant: ProductVariant, quantity?: number) => void;
+  addItem: (product: Product, variant: ProductVariant, quantity?: number, bundleName?: string) => void;
+  addBundle: (bundle: BundlingPackage) => void;
   updateQuantity: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
   toggleItemSelection: (id: string) => void;
@@ -186,18 +187,98 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const addItem = (product: Product, variant: ProductVariant, quantity: number = 1) => {
+  const addItem = (product: Product, variant: ProductVariant, quantity: number = 1, bundleName?: string) => {
     setItems((prev) => {
       const itemId = `${product.id}-${variant.id}`;
       const existing = prev.find((item) => item.id === itemId);
       if (existing) {
         return prev.map((item) =>
           item.id === itemId
-            ? { ...item, quantity: item.quantity + quantity }
+            ? { ...item, quantity: item.quantity + quantity, bundle_name: bundleName || item.bundle_name }
             : item
         );
       }
-      return [...prev, { id: itemId, product, variant, quantity, selected: true }];
+      return [...prev, { id: itemId, product, variant, quantity, selected: true, bundle_name: bundleName }];
+    });
+  };
+
+  const addBundle = (bundle: BundlingPackage) => {
+    if (!bundle.items || bundle.items.length === 0) return;
+    setItems((prev) => {
+      const itemsSum = (bundle.items || []).reduce(
+        (sum, it) => sum + (Number(it.variant?.price) || 0) * (Number(it.quantity) || 1),
+        0
+      );
+      const origPrice =
+        Number(bundle.original_price) > 0 && Number(bundle.original_price) >= Number(bundle.bundle_price)
+          ? Number(bundle.original_price)
+          : itemsSum > 0
+          ? itemsSum
+          : Number(bundle.bundle_price);
+      const bPrice = Number(bundle.bundle_price) || 0;
+      const savAmount = Math.max(0, origPrice - bPrice);
+      const savPct = origPrice > 0 ? Math.round((savAmount / origPrice) * 100) : 0;
+
+      const bundleItemId = `bundle-${bundle.id}`;
+      const existingIndex = prev.findIndex((item) => item.id === bundleItemId);
+
+      if (existingIndex > -1) {
+        return prev.map((item, idx) =>
+          idx === existingIndex
+            ? { ...item, quantity: item.quantity + 1, selected: true }
+            : item
+        );
+      }
+
+      const synthesizedProduct: Product = {
+        id: bundleItemId,
+        name: bundle.name,
+        slug: bundle.slug || `bundle-${bundle.id}`,
+        description: bundle.description,
+        image_url:
+          bundle.image_url ||
+          bundle.items?.[0]?.product?.image_url ||
+          'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=600&auto=format&fit=crop&q=80',
+        requires_prescription: (bundle.items || []).some(
+          (bi) => bi.product?.requires_prescription
+        ),
+        is_active: true,
+        is_featured: true,
+        variants: [],
+        manufacturer: `Paket Farmasi • ${bundle.category}`,
+      };
+
+      const synthesizedVariant: ProductVariant = {
+        id: `bvar-${bundle.id}`,
+        product_id: bundleItemId,
+        name: `Paket Lengkap (${bundle.items.length} Macam Obat)`,
+        unit: 'paket',
+        quantity_per_package: bundle.items.length,
+        price: bPrice,
+        strike_price: origPrice > bPrice ? origPrice : undefined,
+        discount_percentage: savPct,
+        stock: 99,
+        is_active: true,
+      };
+
+      const bundleCartItem: CartItem = {
+        id: bundleItemId,
+        is_bundle: true,
+        bundle: {
+          ...bundle,
+          original_price: origPrice,
+          bundle_price: bPrice,
+          savings_amount: savAmount,
+          savings_percentage: savPct,
+        },
+        bundle_name: bundle.name,
+        product: synthesizedProduct,
+        variant: synthesizedVariant,
+        quantity: 1,
+        selected: true,
+      };
+
+      return [...prev, bundleCartItem];
     });
   };
 
@@ -318,6 +399,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         items,
         isLoaded,
         addItem,
+        addBundle,
         updateQuantity,
         removeItem,
         toggleItemSelection,

@@ -27,9 +27,12 @@ import {
   MapPin,
   Clock,
   Award,
+  Boxes,
+  Baby,
+  Brain,
 } from 'lucide-react';
-import { mockProducts, mockStoreSettings } from '@/lib/data/mock-data';
-import { Product, ProductVariant, StoreSettings } from '@/lib/types';
+import { mockProducts, mockStoreSettings, mockBundlingPackages } from '@/lib/data/mock-data';
+import { Product, ProductVariant, StoreSettings, BundlingPackage } from '@/lib/types';
 import { useCart } from '@/lib/store/cart-context';
 import { useWishlist } from '@/lib/store/wishlist-context';
 import { useAuth } from '@/lib/store/auth-context';
@@ -41,11 +44,12 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const { id } = params;
   const { user } = useAuth();
-  const { addItem, itemCount } = useCart();
+  const { addItem, addBundle, itemCount } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [product, setProduct] = useState<Product | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<ProductVariant | null>(null);
+  const [relatedBundles, setRelatedBundles] = useState<BundlingPackage[]>([]);
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState<'indikasi' | 'komposisi' | 'dosis' | 'perhatian'>('indikasi');
   const [showToast, setShowToast] = useState(false);
@@ -113,6 +117,23 @@ export default function ProductDetailPage() {
         setIsLoading(false);
       });
   }, [id]);
+
+  // Fetch active bundling packages related to this product
+  useEffect(() => {
+    if (!product?.id) return;
+    fetch(`/api/bundling?product_id=${encodeURIComponent(product.id)}&active=true`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setRelatedBundles(json.data);
+        } else {
+          setRelatedBundles([]);
+        }
+      })
+      .catch(() => {
+        setRelatedBundles([]);
+      });
+  }, [product?.id]);
 
   // Computed Images List for Slider (Hook - must be before any return)
   const imageList = React.useMemo(() => {
@@ -748,6 +769,130 @@ export default function ProductDetailPage() {
                 )}
               </div>
             </div>
+
+            {/* Paket Bundling Terkait (Ibu Hamil, Ibu Menyusui, Kesehatan Otak, dll) */}
+            {relatedBundles.length > 0 && (
+              <div className="bg-gradient-to-br from-sky-50/80 via-white to-blue-50/50 rounded-3xl border border-sky-200/80 p-4 sm:p-5 shadow-stitch space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-sky-600 text-white flex items-center justify-center shadow-xs">
+                      <Boxes className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-extrabold text-slate-900">
+                        Tersedia Dalam Paket Bundling Hemat
+                      </h3>
+                      <p className="text-[10px] sm:text-xs text-slate-500">
+                        Produk ini tersedia dalam paket lengkap dengan harga diskon khusus
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/bundles"
+                    className="text-[11px] font-bold text-sky-600 hover:text-sky-700 hidden sm:inline-flex items-center gap-0.5"
+                  >
+                    <span>Lihat Semua Paket</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </Link>
+                </div>
+
+                <div className="space-y-3">
+                  {relatedBundles.map((b) => (
+                    <div
+                      key={b.id}
+                      className="bg-white rounded-2xl border border-sky-100 p-4 space-y-3 shadow-2xs hover:border-sky-300 transition"
+                    >
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800">
+                          {b.category}
+                        </span>
+                        {b.badge && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800">
+                            {b.badge}
+                          </span>
+                        )}
+                      </div>
+
+                      <div>
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900">
+                          {b.name}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 mt-0.5 line-clamp-2">
+                          {b.description}
+                        </p>
+                      </div>
+
+                      {/* Items row */}
+                      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+                        {b.items.map((it, idx) => (
+                          <React.Fragment key={it.id || idx}>
+                            <div className="flex items-center gap-1.5 bg-slate-50 p-1.5 rounded-xl border border-slate-100 shrink-0">
+                              <span className="text-[9px] font-black bg-sky-600 text-white rounded px-1 py-0.2">
+                                {it.quantity}x
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-800 max-w-[120px] truncate">
+                                {it.product?.name || it.product_id}
+                              </span>
+                            </div>
+                            {idx < b.items.length - 1 && (
+                              <Plus className="w-3 h-3 text-slate-400 shrink-0" />
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </div>
+
+                      {/* Pricing & Button */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between gap-3">
+                        {(() => {
+                          const itemsSum = (b.items || []).reduce(
+                            (sum, it) => sum + (Number(it.variant?.price) || 0) * (Number(it.quantity) || 1),
+                            0
+                          );
+                          const origPrice =
+                            Number(b.original_price) > 0 && Number(b.original_price) >= Number(b.bundle_price)
+                              ? Number(b.original_price)
+                              : itemsSum > 0
+                              ? itemsSum
+                              : Number(b.bundle_price);
+                          const bPrice = Number(b.bundle_price) || 0;
+                          const savAmount = Math.max(0, origPrice - bPrice);
+                          const savPct = origPrice > 0 ? Math.round((savAmount / origPrice) * 100) : 0;
+
+                          return (
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[11px] text-slate-400 line-through">
+                                  {formatRupiah(origPrice)}
+                                </span>
+                                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100">
+                                  Hemat {savPct}%
+                                </span>
+                              </div>
+                              <div className="text-xs sm:text-sm font-black text-slate-900">
+                                {formatRupiah(bPrice)}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        <button
+                          onClick={() => {
+                            addBundle(b);
+                            setToastMessage(`Paket "${b.name}" berhasil masuk keranjang!`);
+                            setShowToast(true);
+                            setTimeout(() => setShowToast(false), 2500);
+                          }}
+                          className="px-3.5 py-2 rounded-xl bg-sky-600 hover:bg-sky-700 active:scale-[0.98] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition"
+                        >
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Beli Paket Ini</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Frequently Bought Together / Rekomendasi Terapi Pelengkap */}
             {frequentlyBoughtTogether.length > 0 && (
