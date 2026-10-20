@@ -17,8 +17,10 @@ import {
   ToggleRight,
   Sparkles,
 } from 'lucide-react';
-import { Product, AutoReplyRule, AutoReplyConfig } from '@/lib/types';
+import { Product, AutoReplyRule, AutoReplyConfig, DEFAULT_CHAT_OPENING_MESSAGE } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
+
+export const DEFAULT_OPENING_MESSAGE = DEFAULT_CHAT_OPENING_MESSAGE;
 
 interface AutoReplyModalProps {
   isOpen: boolean;
@@ -33,6 +35,7 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
     fallback_enabled: false,
     fallback_message:
       'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.',
+    opening_message: DEFAULT_OPENING_MESSAGE,
     rules: [],
   });
 
@@ -185,10 +188,10 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
             </div>
             <div>
               <h3 className="text-sm font-bold text-slate-900">
-                Kelola Balasan Pesan Otomatis (Auto-Reply)
+                Kelola Pesan Pembuka & Balasan Otomatis
               </h3>
               <p className="text-[11px] text-slate-500">
-                Atur pemicu kata kunci & rekomendasi obat otomatis saat pasien berkonsultasi
+                Atur salam pembuka pasien, kata kunci, & rekomendasi obat otomatis
               </p>
             </div>
           </div>
@@ -210,6 +213,54 @@ export function AutoReplyModal({ isOpen, onClose, products }: AutoReplyModalProp
             </div>
           ) : (
             <>
+              {/* Pesan Pembuka Konsultasi (Opening / Welcome Message) */}
+              <div className="p-4 rounded-2xl border border-sky-200 bg-sky-50/50 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-sky-600 shrink-0" />
+                      <span>Pesan Pembuka Sesi Chat (Welcome Message)</span>
+                      <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                        Pesan Pertama
+                      </span>
+                    </h4>
+                    <p className="text-[11px] text-slate-600 mt-0.5">
+                      Pesan salam yang otomatis dikirimkan apoteker saat pasien pertama kali membuka konsultasi.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConfig((prev) => ({
+                        ...prev,
+                        opening_message: DEFAULT_OPENING_MESSAGE,
+                      }))
+                    }
+                    className="text-[10px] font-semibold text-sky-700 hover:text-sky-900 bg-white border border-sky-200 hover:border-sky-300 px-2.5 py-1 rounded-lg transition shrink-0 shadow-2xs cursor-pointer active:scale-95"
+                    title="Kembalikan ke pesan pembuka default"
+                  >
+                    Reset Default
+                  </button>
+                </div>
+
+                <div className="space-y-1">
+                  <textarea
+                    rows={3}
+                    value={config.opening_message ?? DEFAULT_OPENING_MESSAGE}
+                    onChange={(e) =>
+                      setConfig((prev) => ({ ...prev, opening_message: e.target.value }))
+                    }
+                    className="w-full bg-white border border-sky-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 leading-relaxed shadow-2xs"
+                    placeholder="Tuliskan pesan pembuka / sambutan hangat apoteker..."
+                  />
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 px-1">
+                    <span>Pesan ini langsung aktif di percakapan sesi konsultasi pasien.</span>
+                    <span className="font-mono">{(config.opening_message ?? DEFAULT_OPENING_MESSAGE).length} karakter</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Master Switch */}
               <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-between">
                 <div>

@@ -223,10 +223,14 @@ export interface AutoReplyRule {
   is_active: boolean;
 }
 
+export const DEFAULT_CHAT_OPENING_MESSAGE =
+  'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
+
 export interface AutoReplyConfig {
   enabled: boolean;
   fallback_enabled?: boolean;
   fallback_message: string;
+  opening_message?: string;
   rules: AutoReplyRule[];
 }
 

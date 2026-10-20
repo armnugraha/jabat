@@ -99,6 +99,29 @@ async function fetchConversationMessages(supabase: any, convId: string, customer
   });
 }
 
+async function getOpeningMessage(supabase: any): Promise<string> {
+  const DEFAULT_MESSAGE =
+    'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
+
+  if (!supabase) return DEFAULT_MESSAGE;
+
+  try {
+    const { data } = await supabase
+      .from('chat_auto_replies')
+      .select('reply_message')
+      .eq('id', '__config_opening_message__')
+      .maybeSingle();
+
+    if (data?.reply_message && data.reply_message.trim()) {
+      return data.reply_message.trim();
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return DEFAULT_MESSAGE;
+}
+
 // GET /api/chat
 export async function GET(request: Request) {
   try {
@@ -245,12 +268,12 @@ export async function GET(request: Request) {
       } else {
         conv = newConv;
 
+        const openingMessage = await getOpeningMessage(supabase);
         // Seed initial welcome message from verified pharmacist in Supabase
         await supabase.from('messages').insert({
           conversation_id: conv.id,
           sender_id: DEFAULT_PHARMACIST_ID,
-          message:
-            'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?',
+          message: openingMessage,
           is_read: true,
         });
       }
@@ -262,14 +285,27 @@ export async function GET(request: Request) {
 
       // If empty for some reason, seed welcome message
       if (formatted.length === 0) {
+        const openingMessage = await getOpeningMessage(supabase);
         await supabase.from('messages').insert({
           conversation_id: conv.id,
           sender_id: DEFAULT_PHARMACIST_ID,
-          message:
-            'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?',
+          message: openingMessage,
           is_read: true,
         });
         formatted = await fetchConversationMessages(supabase, conv.id, userId);
+      } else if (
+        formatted.length === 1 &&
+        formatted[0].sender_id === DEFAULT_PHARMACIST_ID
+      ) {
+        // If the only message is the initial pharmacist welcome message, keep it synced with updated opening message
+        const openingMessage = await getOpeningMessage(supabase);
+        if (formatted[0].message !== openingMessage) {
+          await supabase
+            .from('messages')
+            .update({ message: openingMessage })
+            .eq('id', formatted[0].id);
+          formatted[0].message = openingMessage;
+        }
       }
     }
 

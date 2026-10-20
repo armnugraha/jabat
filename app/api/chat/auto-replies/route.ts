@@ -13,12 +13,16 @@ const noCacheHeaders = {
   Expires: '0',
 };
 
+const DEFAULT_OPENING_MESSAGE =
+  'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
+
 // Default rules fallback (always ready even if migration hasn't been run yet)
 let inMemoryAutoReplyConfig = {
   enabled: true,
   fallback_enabled: false,
   fallback_message:
     'Baik Kak, terima kasih sudah berkonsultasi dengan Apotek Jabat. Apabila keluhan berlanjut lebih dari 3 hari atau bertambah berat, segera konsultasikan langsung ke dokter ya.',
+  opening_message: DEFAULT_OPENING_MESSAGE,
   rules: [
     {
       id: 'rule-paracetamol',
@@ -68,39 +72,53 @@ export async function GET(request: Request) {
           .eq('id', 'global')
           .maybeSingle();
 
-        // Try reading rules from Supabase
+        // Try reading opening message from Supabase
+        const { data: openingRow } = await supabase
+          .from('chat_auto_replies')
+          .select('reply_message')
+          .eq('id', '__config_opening_message__')
+          .maybeSingle();
+
+        const currentOpeningMessage =
+          openingRow?.reply_message?.trim() || inMemoryAutoReplyConfig.opening_message;
+
+        // Try reading rules from Supabase (excluding opening message)
         const { data: rulesRows, error: rulesErr } = await supabase
           .from('chat_auto_replies')
           .select('*, product:products!recommended_product_id (*, variants:product_variants(*))')
+          .neq('id', '__config_opening_message__')
           .order('created_at', { ascending: true });
 
-        if (!rulesErr && rulesRows && rulesRows.length > 0) {
-          const formattedRules = rulesRows.map((r: any) => ({
-            id: r.id,
-            keywords: Array.isArray(r.keywords) ? r.keywords : [],
-            reply_message: r.reply_message,
-            recommended_product_id: r.recommended_product_id,
-            recommended_product: r.product || undefined,
-            is_active: r.is_active ?? true,
-          }));
+        const rulesList =
+          !rulesErr && rulesRows && rulesRows.length > 0
+            ? rulesRows.map((r: any) => ({
+                id: r.id,
+                keywords: Array.isArray(r.keywords) ? r.keywords : [],
+                reply_message: r.reply_message,
+                recommended_product_id: r.recommended_product_id,
+                recommended_product: r.product || undefined,
+                is_active: r.is_active ?? true,
+              }))
+            : inMemoryAutoReplyConfig.rules;
 
-          return NextResponse.json(
-            {
-              success: true,
-              data: {
-                enabled: configRow ? Boolean(configRow.enabled) : inMemoryAutoReplyConfig.enabled,
-                fallback_enabled: configRow && configRow.fallback_enabled !== undefined
+        return NextResponse.json(
+          {
+            success: true,
+            data: {
+              enabled: configRow ? Boolean(configRow.enabled) : inMemoryAutoReplyConfig.enabled,
+              fallback_enabled:
+                configRow && configRow.fallback_enabled !== undefined
                   ? Boolean(configRow.fallback_enabled)
                   : inMemoryAutoReplyConfig.fallback_enabled,
-                fallback_message: configRow
-                  ? configRow.fallback_message
-                  : inMemoryAutoReplyConfig.fallback_message,
-                rules: formattedRules,
-              },
+              fallback_message: configRow
+                ? configRow.fallback_message
+                : inMemoryAutoReplyConfig.fallback_message,
+              opening_message: currentOpeningMessage,
+              rules: rulesList,
             },
-            { headers: noCacheHeaders }
-          );
-        }
+          },
+          { headers: noCacheHeaders }
+        );
       } catch (dbErr) {
         // Silently fallback to in-memory config if table not yet created
       }
@@ -125,7 +143,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { enabled, fallback_enabled, fallback_message, rules } = body;
+    const { enabled, fallback_enabled, fallback_message, opening_message, rules } = body;
 
     if (enabled !== undefined) {
       inMemoryAutoReplyConfig.enabled = Boolean(enabled);
@@ -135,6 +153,9 @@ export async function POST(request: Request) {
     }
     if (typeof fallback_message === 'string') {
       inMemoryAutoReplyConfig.fallback_message = fallback_message.trim();
+    }
+    if (typeof opening_message === 'string' && opening_message.trim()) {
+      inMemoryAutoReplyConfig.opening_message = opening_message.trim();
     }
     if (Array.isArray(rules)) {
       inMemoryAutoReplyConfig.rules = rules.map((r: any, idx: number) => ({
@@ -167,10 +188,28 @@ export async function POST(request: Request) {
             updated_at: new Date().toISOString(),
           });
 
-        // Replace rules in database
+        // Upsert opening message row
+        if (inMemoryAutoReplyConfig.opening_message) {
+          await supabase
+            .from('chat_auto_replies')
+            .upsert({
+              id: '__config_opening_message__',
+              keywords: ['__system_opening__'],
+              reply_message: inMemoryAutoReplyConfig.opening_message,
+              recommended_product_id: null,
+              is_active: true,
+              updated_at: new Date().toISOString(),
+            });
+        }
+
+        // Replace rules in database (preserve opening message)
         if (Array.isArray(rules)) {
-          // Clear previous rules and re-insert
-          await supabase.from('chat_auto_replies').delete().neq('id', '');
+          // Clear previous rules except opening message and re-insert
+          await supabase
+            .from('chat_auto_replies')
+            .delete()
+            .neq('id', '__config_opening_message__');
+
           const rowsToInsert = inMemoryAutoReplyConfig.rules.map((r) => ({
             id: r.id,
             keywords: r.keywords,
@@ -192,7 +231,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: true,
-        message: 'Pengaturan balasan otomatis berhasil disimpan.',
+        message: 'Pengaturan pesan pembuka & balasan otomatis berhasil disimpan.',
         data: inMemoryAutoReplyConfig,
       },
       { headers: noCacheHeaders }
@@ -200,7 +239,7 @@ export async function POST(request: Request) {
   } catch (err: any) {
     console.error('POST /api/chat/auto-replies error:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Gagal menyimpan pengaturan balasan otomatis.' },
+      { success: false, error: err?.message || 'Gagal menyimpan pengaturan.' },
       { status: 500, headers: noCacheHeaders }
     );
   }

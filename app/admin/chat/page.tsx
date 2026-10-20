@@ -313,7 +313,7 @@ export default function AdminChatPage() {
             className="px-3 py-1.5 rounded-xl border border-sky-200 bg-sky-50 hover:bg-sky-100 text-sky-800 text-xs font-semibold flex items-center gap-1.5 shadow-2xs transition"
           >
             <Bot className="w-3.5 h-3.5 text-sky-600" />
-            <span>Kelola Pesan Otomatis</span>
+            <span>Pesan Pembuka & Balasan Otomatis</span>
           </button>
 
           <button
