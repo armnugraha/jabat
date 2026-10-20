@@ -30,6 +30,7 @@ import {
   Boxes,
   Baby,
   Brain,
+  AlertCircle,
 } from 'lucide-react';
 import { mockProducts, mockStoreSettings, mockBundlingPackages } from '@/lib/data/mock-data';
 import { Product, ProductVariant, StoreSettings, BundlingPackage } from '@/lib/types';
@@ -227,7 +228,9 @@ export default function ProductDetailPage() {
   };
 
   const isOutOfStock = (selectedVariant?.stock || 0) <= 0;
-  const currentSubtotal = selectedVariant.price * (isOutOfStock ? 0 : quantity);
+  const isProductInactive = product.is_active === false;
+  const isUnavailable = isOutOfStock || isProductInactive;
+  const currentSubtotal = selectedVariant.price * (isUnavailable ? 0 : quantity);
 
   const currentImageIndex = Math.min(activeImageIndex, Math.max(0, imageList.length - 1));
 
@@ -1031,7 +1034,7 @@ export default function ProductDetailPage() {
                 <div className="flex items-center justify-between border border-slate-200 rounded-2xl p-1 bg-slate-50">
                   <button
                     onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    disabled={quantity <= 1 || isOutOfStock}
+                    disabled={quantity <= 1 || isUnavailable}
                     className="w-8 h-8 flex items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
                   >
                     <Minus className="w-3.5 h-3.5" />
@@ -1041,8 +1044,8 @@ export default function ProductDetailPage() {
                     type="number"
                     min="1"
                     max={selectedVariant.stock || 999}
-                    disabled={isOutOfStock}
-                    value={isOutOfStock ? 0 : quantity}
+                    disabled={isUnavailable}
+                    value={isUnavailable ? 0 : quantity}
                     onChange={(e) => {
                       const maxStock = selectedVariant.stock || 999;
                       const val = parseInt(e.target.value, 10);
@@ -1061,7 +1064,7 @@ export default function ProductDetailPage() {
                       const maxStock = selectedVariant.stock || 999;
                       setQuantity((q) => Math.min(q + 1, maxStock));
                     }}
-                    disabled={quantity >= (selectedVariant.stock || 999) || isOutOfStock}
+                    disabled={quantity >= (selectedVariant.stock || 999) || isUnavailable}
                     className="w-8 h-8 flex items-center justify-center rounded-xl bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
                   >
                     <Plus className="w-3.5 h-3.5" />
@@ -1077,7 +1080,7 @@ export default function ProductDetailPage() {
                     {formatRupiah(currentSubtotal)}
                   </div>
                 </div>
-                {savings > 0 && !isOutOfStock && (
+                {savings > 0 && !isUnavailable && (
                   <span className="text-[10px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-lg">
                     Hemat {formatRupiah(savings * quantity)}
                   </span>
@@ -1086,24 +1089,31 @@ export default function ProductDetailPage() {
 
               {/* Action Buttons */}
               <div className="space-y-2 pt-1">
+                {isProductInactive && (
+                  <div className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-bold flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Produk ini sedang dinonaktifkan oleh apotek dan tidak dapat dipesan.</span>
+                  </div>
+                )}
+
                 {/* Add to Cart */}
                 <button
                   onClick={handleAddToCart}
-                  disabled={isOutOfStock}
+                  disabled={isUnavailable}
                   className="w-full py-3 px-4 rounded-2xl bg-sky-50 hover:bg-sky-100 disabled:bg-slate-100 disabled:text-slate-400 text-sky-700 font-bold text-xs flex items-center justify-center gap-2 border border-sky-200/80 transition active:scale-[0.98]"
                 >
                   <ShoppingBag className="w-4 h-4" />
-                  <span>+ Tambah Keranjang</span>
+                  <span>{isProductInactive ? 'Produk Dinonaktifkan' : '+ Tambah Keranjang'}</span>
                 </button>
 
                 {/* Buy Now */}
                 <button
                   onClick={handleBuyNow}
-                  disabled={isOutOfStock}
+                  disabled={isUnavailable}
                   className="w-full py-3 px-4 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-600/25 transition active:scale-[0.98]"
                 >
                   <Zap className="w-4 h-4 fill-white" />
-                  <span>{isOutOfStock ? 'Stok Habis' : 'Beli Sekarang'}</span>
+                  <span>{isProductInactive ? 'Tidak Tersedia' : isOutOfStock ? 'Stok Habis' : 'Beli Sekarang'}</span>
                 </button>
 
                 {/* Pharmacist Consultation Link */}
@@ -1213,21 +1223,21 @@ export default function ProductDetailPage() {
             {/* Add to Cart Button */}
             <button
               onClick={handleAddToCart}
-              disabled={isOutOfStock}
+              disabled={isUnavailable}
               className="flex-1 py-3 px-3 rounded-2xl bg-sky-50 hover:bg-sky-100 disabled:bg-slate-100 disabled:text-slate-400 text-sky-700 font-bold text-xs flex items-center justify-center gap-1.5 border border-sky-200/70 transition active:scale-[0.98]"
             >
               <ShoppingBag className="w-4 h-4" />
-              <span>+ Keranjang</span>
+              <span>{isProductInactive ? 'Nonaktif' : '+ Keranjang'}</span>
             </button>
 
             {/* Buy Now Button */}
             <button
               onClick={handleBuyNow}
-              disabled={isOutOfStock}
+              disabled={isUnavailable}
               className="flex-1 py-3 px-3 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:bg-slate-300 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-sky-600/25 transition active:scale-[0.98]"
             >
               <Zap className="w-4 h-4 fill-white" />
-              <span>{isOutOfStock ? 'Stok Habis' : 'Beli Sekarang'}</span>
+              <span>{isProductInactive ? 'Tidak Tersedia' : isOutOfStock ? 'Stok Habis' : 'Beli Sekarang'}</span>
             </button>
           </div>
         </div>

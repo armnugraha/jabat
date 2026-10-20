@@ -131,6 +131,74 @@ export async function POST(request: Request) {
       );
     }
 
+    // Validate that all items are active, available, and have sufficient stock
+    if (isSupabaseConfigured()) {
+      try {
+        const supabase = await getSupabaseAdminClient();
+        for (const it of items) {
+          const isBundle = it.is_bundle || String(it.product?.id || '').startsWith('bundle-');
+          if (isBundle) {
+            const rawBundleId = it.bundle?.id || String(it.product?.id || it.productId || '').replace(/^bundle-/, '');
+            const { data: bPkg } = await supabase
+              .from('bundling_packages')
+              .select('id, name, is_active')
+              .eq('id', rawBundleId)
+              .maybeSingle();
+
+            if (!bPkg) {
+              return NextResponse.json(
+                { success: false, error: `Paket bundling "${it.product?.name || 'Paket'}" sudah tidak tersedia di apotek.` },
+                { status: 400 }
+              );
+            }
+            if (bPkg.is_active === false) {
+              return NextResponse.json(
+                { success: false, error: `Paket bundling "${bPkg.name}" sedang dinonaktifkan oleh apotek. Silakan periksa keranjang Anda.` },
+                { status: 400 }
+              );
+            }
+          } else {
+            const prodId = it.product?.id || it.productId;
+            const variId = it.variant?.id || it.variantId;
+            const { data: prod } = await supabase
+              .from('products')
+              .select('id, name, is_active, variants:product_variants(*)')
+              .eq('id', prodId)
+              .maybeSingle();
+
+            if (!prod) {
+              return NextResponse.json(
+                { success: false, error: `Produk "${it.product?.name || 'Obat'}" sudah tidak terdaftar di apotek.` },
+                { status: 400 }
+              );
+            }
+            if (prod.is_active === false) {
+              return NextResponse.json(
+                { success: false, error: `Produk "${prod.name}" sedang dinonaktifkan oleh apotek.` },
+                { status: 400 }
+              );
+            }
+
+            const vari = prod.variants?.find((v: any) => v.id === variId) || prod.variants?.[0];
+            if (!vari || vari.is_active === false) {
+              return NextResponse.json(
+                { success: false, error: `Varian produk "${prod.name}" sedang dinonaktifkan oleh apotek.` },
+                { status: 400 }
+              );
+            }
+            if (vari.stock !== undefined && vari.stock < (it.quantity || 1)) {
+              return NextResponse.json(
+                { success: false, error: `Stok untuk "${prod.name}" (${vari.name}) tidak mencukupi (sisa stok: ${vari.stock}).` },
+                { status: 400 }
+              );
+            }
+          }
+        }
+      } catch (valErr) {
+        console.warn('Orders item validation warning:', valErr);
+      }
+    }
+
     const orderNumber = `ASM-${Date.now().toString().slice(-6)}`;
     const orderId = `ord-${Date.now()}`;
 

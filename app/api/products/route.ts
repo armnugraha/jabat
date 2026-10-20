@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const sort = searchParams.get('sort') || 'terpopuler';
     const minPrice = searchParams.get('min_price') ? Number(searchParams.get('min_price')) : null;
     const maxPrice = searchParams.get('max_price') ? Number(searchParams.get('max_price')) : null;
+    const showAll = searchParams.get('all') === 'true' || searchParams.get('include_inactive') === 'true';
+    const activeParam = searchParams.get('active');
 
     if (isSupabaseConfigured()) {
       const supabase = await getSupabaseAdminClient(request);
@@ -34,6 +36,16 @@ export async function GET(request: NextRequest) {
           variants:product_variants(*)
         `)
         .order('created_at', { ascending: false });
+
+      if (!showAll) {
+        if (activeParam === 'false') {
+          queryBuilder = queryBuilder.eq('is_active', false);
+        } else {
+          queryBuilder = queryBuilder.eq('is_active', true);
+        }
+      } else if (activeParam !== null) {
+        queryBuilder = queryBuilder.eq('is_active', activeParam === 'true');
+      }
 
       if (requiresPrescription !== null && requiresPrescription !== undefined && requiresPrescription !== '') {
         queryBuilder = queryBuilder.eq('requires_prescription', requiresPrescription === 'true');
@@ -135,7 +147,27 @@ export async function GET(request: NextRequest) {
     }
 
     // Local / In-memory fallback
+    // Sync dynamicProducts with mockProducts
+    for (const mp of mockProducts) {
+      const idx = dynamicProducts.findIndex((dp) => dp.id === mp.id);
+      if (idx !== -1) {
+        dynamicProducts[idx].is_active = mp.is_active;
+      }
+    }
+
     let result = dynamicProducts.filter((p) => {
+      let matchActive = true;
+      if (!showAll) {
+        if (activeParam === 'false') {
+          matchActive = p.is_active === false;
+        } else {
+          matchActive = p.is_active !== false;
+        }
+      } else if (activeParam !== null) {
+        matchActive = (p.is_active !== false) === (activeParam === 'true');
+      }
+      if (!matchActive) return false;
+
       const matchQuery =
         !query ||
         p.name.toLowerCase().includes(query) ||

@@ -178,9 +178,31 @@ export async function PUT(
     }
 
     // Fallback update
+    const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
+    if (mockP) {
+      mockP.name = name.trim();
+      mockP.description = description || '';
+      mockP.category_id = category_id || mockP.category_id;
+      mockP.requires_prescription = Boolean(requires_prescription);
+      mockP.is_active = is_active !== false;
+      mockP.is_featured = Boolean(is_featured);
+      mockP.bpom_number = bpom_number || null;
+      mockP.manufacturer = manufacturer || null;
+      mockP.indications = indications || null;
+      mockP.composition = composition || null;
+      mockP.dosage = dosage || null;
+      mockP.precautions = precautions || null;
+      mockP.storage_instructions = storage_instructions || null;
+      mockP.image_url = image_url || mockP.image_url;
+      if (variants && Array.isArray(variants)) {
+        mockP.variants = variants;
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Produk berhasil diperbarui',
+      data: mockP,
     });
   } catch (err: any) {
     console.error('Update product error:', err);
@@ -198,11 +220,66 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await request.json();
-    const { variantId, stock, delta } = body;
+    const { variantId, stock, delta, is_active } = body;
 
+    // 1. Handle toggle active status
+    if (is_active !== undefined) {
+      const activeBool = Boolean(is_active);
+
+      if (isSupabaseConfigured()) {
+        const supabase = await getSupabaseAdminClient(request);
+        let queryBuilder = supabase
+          .from('products')
+          .update({ is_active: activeBool, updated_at: new Date().toISOString() });
+
+        if (isValidUUID(id)) {
+          queryBuilder = queryBuilder.eq('id', id);
+        } else {
+          queryBuilder = queryBuilder.eq('slug', id);
+        }
+
+        const { data: updatedProd, error: updateErr } = await queryBuilder
+          .select(`*, category:categories(*), variants:product_variants(*)`)
+          .maybeSingle();
+
+        if (updateErr) {
+          console.error('Failed to update product is_active in Supabase:', updateErr);
+          return NextResponse.json(
+            { success: false, error: updateErr.message || 'Gagal mengubah status aktif produk di database' },
+            { status: 500 }
+          );
+        }
+
+        // Also sync local fallback in memory
+        const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
+        if (mockP) {
+          mockP.is_active = activeBool;
+        }
+
+        return NextResponse.json({
+          success: true,
+          message: `Produk berhasil ${activeBool ? 'diaktifkan' : 'dinonaktifkan'}`,
+          data: updatedProd || mockP,
+        });
+      }
+
+      // Fallback local update
+      const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
+      if (mockP) {
+        mockP.is_active = activeBool;
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Produk berhasil ${activeBool ? 'diaktifkan' : 'dinonaktifkan'}`,
+        data: mockP,
+      });
+    }
+
+    // 2. Handle variant stock update
     if (!variantId) {
       return NextResponse.json(
-        { success: false, error: 'variantId wajib disertakan' },
+        { success: false, error: 'variantId atau is_active wajib disertakan' },
         { status: 400 }
       );
     }
@@ -251,7 +328,7 @@ export async function PATCH(
       }
     } else {
       // Mock data fallback
-      const prod = mockProducts.find((p) => p.id === id);
+      const prod = mockProducts.find((p) => p.id === id || p.slug === id);
       const variant = prod?.variants.find((v) => v.id === variantId);
       if (variant) {
         if (typeof stock === 'number') {
@@ -275,7 +352,7 @@ export async function PATCH(
   } catch (err: any) {
     console.error('PATCH /api/products/[id] error:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Gagal memperbarui stok' },
+      { success: false, error: err?.message || 'Gagal memperbarui produk' },
       { status: 500 }
     );
   }

@@ -23,6 +23,9 @@ import {
   Baby,
   Brain,
   ShieldAlert,
+  ShieldCheck,
+  Activity,
+  Tag,
   HelpCircle,
   Package,
 } from 'lucide-react';
@@ -276,7 +279,7 @@ export default function AdminBundlingPage() {
       name: formName.trim(),
       category: categoryToSave,
       description: formDescription.trim(),
-      badge: formBadge.trim() || (calculatedSavingsPct > 0 ? `Hemat ${calculatedSavingsPct}%` : undefined),
+      badge: formBadge.trim() ? formBadge.trim() : (editingBundle ? null : undefined),
       image_url: formImageUrl.trim() || undefined,
       original_price: calculatedOriginalPrice,
       bundle_price: numericBundlePrice > 0 ? numericBundlePrice : calculatedOriginalPrice,
@@ -332,7 +335,11 @@ export default function AdminBundlingPage() {
       await fetch('/api/bundling', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: bundle.id, is_active: updatedStatus }),
+        body: JSON.stringify({
+          id: bundle.id,
+          is_active: updatedStatus,
+          badge: bundle.badge || null,
+        }),
       });
     } catch (err) {
       console.error('Failed toggling bundle status:', err);
@@ -382,6 +389,20 @@ export default function AdminBundlingPage() {
         bg: 'bg-amber-50 text-amber-700 border-amber-200/70',
         badgeBg: 'bg-amber-100 text-amber-800',
         icon: ShieldAlert,
+      };
+    }
+    if (lower.includes('daya tahan') || lower.includes('imun')) {
+      return {
+        bg: 'bg-emerald-50 text-emerald-700 border-emerald-200/70',
+        badgeBg: 'bg-emerald-100 text-emerald-800',
+        icon: ShieldCheck,
+      };
+    }
+    if (lower.includes('lambung') || lower.includes('cerna') || lower.includes('pencernaan')) {
+      return {
+        bg: 'bg-orange-50 text-orange-700 border-orange-200/70',
+        badgeBg: 'bg-orange-100 text-orange-800',
+        icon: Activity,
       };
     }
     return {
@@ -499,6 +520,9 @@ export default function AdminBundlingPage() {
           {allCategories.map((cat) => {
             const count = bundles.filter((b) => b.category.toLowerCase() === cat.toLowerCase()).length;
             const isSelected = selectedCategory.toLowerCase() === cat.toLowerCase();
+            const theme = getCategoryTheme(cat);
+            const Icon = theme.icon;
+
             return (
               <button
                 key={cat}
@@ -509,6 +533,7 @@ export default function AdminBundlingPage() {
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
+                <Icon className={`w-3.5 h-3.5 ${isSelected ? 'text-white' : 'text-slate-500'}`} />
                 <span>{cat}</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full ${isSelected ? 'bg-sky-500 text-white' : 'bg-slate-200 text-slate-700'}`}>
                   {count}
@@ -751,52 +776,80 @@ export default function AdminBundlingPage() {
                 />
               </div>
 
-              {/* Kategori Bundling */}
+              {/* Kategori Bundling dengan Icon Selector */}
               <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Kategori Bundling *
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                  <span>Pilih Kategori Bundling *</span>
+                  <span className="text-[10px] font-normal text-slate-400">Pilih kategori sesuai kelompok kebutuhan</span>
                 </label>
                 <div className="space-y-2">
-                  <div className="flex flex-wrap gap-1.5">
-                    {PRESET_CATEGORIES.map((preset) => (
-                      <button
-                        type="button"
-                        key={preset}
-                        onClick={() => {
-                          setFormCategory(preset);
-                          setIsCustomCategory(false);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
-                          !isCustomCategory && formCategory === preset
-                            ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                            : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                        }`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {PRESET_CATEGORIES.map((preset) => {
+                      const theme = getCategoryTheme(preset);
+                      const Icon = theme.icon;
+                      const isSelected = !isCustomCategory && formCategory === preset;
+
+                      return (
+                        <button
+                          type="button"
+                          key={preset}
+                          onClick={() => {
+                            setFormCategory(preset);
+                            setIsCustomCategory(false);
+                          }}
+                          className={`p-2.5 rounded-2xl text-xs font-bold border transition flex items-center gap-2.5 text-left group cursor-pointer ${
+                            isSelected
+                              ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
+                              : 'bg-slate-50/80 text-slate-700 border-slate-200/90 hover:bg-white hover:border-slate-300'
+                          }`}
+                        >
+                          <div
+                            className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition ${
+                              isSelected
+                                ? 'bg-white/20 text-white'
+                                : 'bg-white text-slate-600 border border-slate-200 shadow-2xs group-hover:scale-105'
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5" />
+                          </div>
+                          <span className="leading-snug line-clamp-1">{preset}</span>
+                        </button>
+                      );
+                    })}
+
                     <button
                       type="button"
                       onClick={() => setIsCustomCategory(true)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition ${
+                      className={`p-2.5 rounded-2xl text-xs font-bold border transition flex items-center gap-2.5 text-left group cursor-pointer ${
                         isCustomCategory
                           ? 'bg-sky-600 text-white border-sky-600 shadow-xs'
-                          : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          : 'bg-slate-50/80 text-slate-700 border-slate-200/90 hover:bg-white hover:border-slate-300'
                       }`}
                     >
-                      + Kategori Lainnya
+                      <div
+                        className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition ${
+                          isCustomCategory
+                            ? 'bg-white/20 text-white'
+                            : 'bg-white text-slate-600 border border-slate-200 shadow-2xs group-hover:scale-105'
+                        }`}
+                      >
+                        <Tag className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="leading-snug line-clamp-1">+ Kategori Lain</span>
                     </button>
                   </div>
 
                   {isCustomCategory && (
-                    <input
-                      type="text"
-                      required={isCustomCategory}
-                      value={formCustomCategory}
-                      onChange={(e) => setFormCustomCategory(e.target.value)}
-                      placeholder="Ketik kategori baru (contoh: Lansia & Sendi, Anak Sehat, dll)..."
-                      className="w-full bg-white border border-sky-300 rounded-2xl py-2 px-3 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                    />
+                    <div className="pt-0.5 animate-fade-in">
+                      <input
+                        type="text"
+                        required={isCustomCategory}
+                        value={formCustomCategory}
+                        onChange={(e) => setFormCustomCategory(e.target.value)}
+                        placeholder="Ketik kategori baru (contoh: Lansia & Sendi, Anak Sehat, dll)..."
+                        className="w-full bg-white border border-sky-300 rounded-2xl py-2 px-3 text-xs text-slate-900 focus:outline-none focus:ring-1 focus:ring-sky-500 shadow-2xs"
+                      />
+                    </div>
                   )}
                 </div>
               </div>

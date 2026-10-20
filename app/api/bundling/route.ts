@@ -36,7 +36,7 @@ function computeBundlePricing(bundle: BundlingPackage, items: BundlingItem[]): B
     bundle_price: bundlePrice,
     savings_amount: savingsAmount,
     savings_percentage: savingsPercentage,
-    badge: bundle.badge || (savingsPercentage > 0 ? `Hemat ${savingsPercentage}%` : undefined),
+    badge: bundle.badge || undefined,
     items,
   };
 }
@@ -260,7 +260,7 @@ export async function POST(request: NextRequest) {
       bundle_price: finalBundlePrice,
       savings_amount: savingsAmount,
       savings_percentage: savingsPercentage,
-      badge: badge?.trim() || (savingsPercentage > 0 ? `Hemat ${savingsPercentage}%` : undefined),
+      badge: badge?.trim() || undefined,
       is_active: is_active ?? true,
       display_order: dynamicBundles.length + 1,
       items: formattedItems.map((it) => ({ ...it, bundle_id: bundleId })),
@@ -343,8 +343,22 @@ export async function PUT(request: NextRequest) {
       );
     }
 
-    const existingIndex = dynamicBundles.findIndex((b) => b.id === id);
-    const existing = dynamicBundles[existingIndex];
+    let existingIndex = dynamicBundles.findIndex((b) => b.id === id);
+    let existing = existingIndex > -1 ? dynamicBundles[existingIndex] : undefined;
+
+    if (!existing && isSupabaseConfigured()) {
+      try {
+        const supabase = await getSupabaseAdminClient();
+        const { data: dbPkg } = await supabase
+          .from('bundling_packages')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle();
+        if (dbPkg) {
+          existing = dbPkg;
+        }
+      } catch (e) {}
+    }
 
     // Fetch products from database or mock
     let productsList = mockProducts;
@@ -385,6 +399,12 @@ export async function PUT(request: NextRequest) {
     const savingsAmount = Math.max(0, originalPrice - finalBundlePrice);
     const savingsPercentage = originalPrice > 0 ? Math.round((savingsAmount / originalPrice) * 100) : 0;
 
+    // Preserve existing badge unless explicitly passed in body
+    const finalBadge =
+      badge !== undefined
+        ? (badge && typeof badge === 'string' && badge.trim().length > 0 ? badge.trim() : undefined)
+        : existing?.badge;
+
     const updatedBundle: BundlingPackage = {
       ...(existing || {}),
       id,
@@ -397,7 +417,7 @@ export async function PUT(request: NextRequest) {
       bundle_price: finalBundlePrice,
       savings_amount: savingsAmount,
       savings_percentage: savingsPercentage,
-      badge: badge !== undefined ? badge : (savingsPercentage > 0 ? `Hemat ${savingsPercentage}%` : undefined),
+      badge: finalBadge,
       is_active: is_active !== undefined ? is_active : existing?.is_active ?? true,
       display_order: existing?.display_order || 1,
       items: formattedItems,
@@ -414,21 +434,27 @@ export async function PUT(request: NextRequest) {
     if (isSupabaseConfigured()) {
       try {
         const supabase = await getSupabaseAdminClient();
+        const fieldsToUpdate: any = {
+          updated_at: updatedBundle.updated_at,
+        };
+        if (is_active !== undefined) fieldsToUpdate.is_active = is_active;
+        if (name !== undefined) fieldsToUpdate.name = updatedBundle.name;
+        if (category !== undefined) fieldsToUpdate.category = updatedBundle.category;
+        if (description !== undefined) fieldsToUpdate.description = updatedBundle.description;
+        if (image_url !== undefined) fieldsToUpdate.image_url = updatedBundle.image_url;
+        if (bundle_price !== undefined) fieldsToUpdate.bundle_price = updatedBundle.bundle_price;
+        if (body.original_price !== undefined || items !== undefined) {
+          fieldsToUpdate.original_price = updatedBundle.original_price;
+          fieldsToUpdate.savings_amount = updatedBundle.savings_amount;
+          fieldsToUpdate.savings_percentage = updatedBundle.savings_percentage;
+        }
+        if (badge !== undefined) {
+          fieldsToUpdate.badge = finalBadge || null;
+        }
+
         await supabase
           .from('bundling_packages')
-          .update({
-            name: updatedBundle.name,
-            category: updatedBundle.category,
-            description: updatedBundle.description,
-            image_url: updatedBundle.image_url,
-            original_price: updatedBundle.original_price,
-            bundle_price: updatedBundle.bundle_price,
-            savings_amount: updatedBundle.savings_amount,
-            savings_percentage: updatedBundle.savings_percentage,
-            badge: updatedBundle.badge,
-            is_active: updatedBundle.is_active,
-            updated_at: updatedBundle.updated_at,
-          })
+          .update(fieldsToUpdate)
           .eq('id', id);
 
         if (items) {

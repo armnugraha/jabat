@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -73,6 +73,110 @@ export default function CartPage() {
     storeSettings,
     availablePromotions,
   } = useCart();
+
+  // Real-time availability validation state
+  const [availabilityMap, setAvailabilityMap] = useState<
+    Record<string, { available: boolean; reason: string | null; currentStock?: number; name?: string }>
+  >({});
+  const [isValidatingCart, setIsValidatingCart] = useState(false);
+
+  // Validate cart items against live catalog
+  const validateCart = async (itemsToValidate = items) => {
+    if (!itemsToValidate || itemsToValidate.length === 0) {
+      setAvailabilityMap({});
+      return;
+    }
+    setIsValidatingCart(true);
+    try {
+      const res = await fetch('/api/cart/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: itemsToValidate }),
+      });
+      const json = await res.json();
+      if (json.success && json.items) {
+        setAvailabilityMap(json.items);
+      }
+    } catch (e) {
+      console.warn('Cart validation error:', e);
+    } finally {
+      setIsValidatingCart(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoaded && items.length > 0) {
+      validateCart(items);
+    } else if (items.length === 0) {
+      setAvailabilityMap({});
+    }
+  }, [isLoaded, items]);
+
+  // Valid selected items that are available & active
+  const validSelectedItems = useMemo(() => {
+    return items.filter((item) => {
+      const status = availabilityMap[item.id];
+      const isAvailable = status !== undefined ? status.available : true;
+      return item.selected && isAvailable;
+    });
+  }, [items, availabilityMap]);
+
+  const validSelectedCount = useMemo(() => {
+    return validSelectedItems.reduce((acc, item) => acc + item.quantity, 0);
+  }, [validSelectedItems]);
+
+  const unavailableItemsCount = useMemo(() => {
+    return items.filter((item) => {
+      const status = availabilityMap[item.id];
+      return status !== undefined && !status.available;
+    }).length;
+  }, [items, availabilityMap]);
+
+  // Gross & Subtotal for valid items
+  const effectiveGrossProductTotal = useMemo(() => {
+    return validSelectedItems.reduce(
+      (sum, item) => sum + (item.variant.strike_price || item.variant.price) * item.quantity,
+      0
+    );
+  }, [validSelectedItems]);
+
+  const effectiveSubtotal = useMemo(() => {
+    return validSelectedItems.reduce(
+      (sum, item) => sum + item.variant.price * item.quantity,
+      0
+    );
+  }, [validSelectedItems]);
+
+  const effectiveProductDiscountTotal = Math.max(0, effectiveGrossProductTotal - effectiveSubtotal);
+
+  const expressFee = storeSettings?.express_delivery_fee ?? 10000;
+  const regularFee = storeSettings?.regular_delivery_fee ?? 15000;
+  const freeThreshold = storeSettings?.free_delivery_threshold ?? 100000;
+
+  const effectiveDeliveryFee =
+    deliveryOption === 'pickup'
+      ? 0
+      : deliveryOption === 'express'
+      ? effectiveSubtotal >= freeThreshold && effectiveSubtotal > 0
+        ? 0
+        : expressFee
+      : regularFee;
+
+  const effectivePromoDiscount =
+    appliedPromo && effectiveSubtotal >= (appliedPromo.min_order_amount || 0)
+      ? appliedPromo.discount_type === 'percentage'
+        ? Math.min(
+            Math.round((effectiveSubtotal * appliedPromo.discount_value) / 100),
+            appliedPromo.max_discount || Infinity
+          )
+        : appliedPromo.discount_value
+      : 0;
+
+  const effectiveTotal = Math.max(0, effectiveSubtotal + effectiveDeliveryFee - effectivePromoDiscount);
+
+  const effectiveHasPrescriptionItems = validSelectedItems.some(
+    (item) => item.product.requires_prescription
+  );
 
   // Addresses state
   const [addresses, setAddresses] = useState<CustomerAddress[]>([]);
@@ -255,19 +359,40 @@ export default function CartPage() {
       return;
     }
 
-    if (selectedCount === 0) {
-      alert('Pilih minimal 1 produk untuk checkout');
+    if (validSelectedCount === 0) {
+      alert('Pilih minimal 1 produk atau paket bundling yang tersedia untuk checkout.');
       return;
     }
 
-    if (hasPrescriptionItems && !prescriptionFile) {
+    if (effectiveHasPrescriptionItems && !prescriptionFile) {
       alert('Pesanan ini mengandung obat keras yang memerlukan unggah foto resep dokter.');
       return;
     }
 
     setIsPlacingOrder(true);
     try {
-      const selectedList = items.filter((it) => it.selected);
+      // 1. Re-validate items with backend right before order creation to avoid out-of-stock / disabled items
+      const verifyRes = await fetch('/api/cart/validate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: validSelectedItems }),
+      });
+      const verifyJson = await verifyRes.json();
+
+      if (verifyJson.success && (verifyJson.hasUnavailable || (verifyJson.unavailableList && verifyJson.unavailableList.length > 0))) {
+        setAvailabilityMap((prev) => ({ ...prev, ...(verifyJson.items || {}) }));
+        const listText = (verifyJson.unavailableList || [])
+          .map((u: any) => `• ${u.name}: ${u.reason}`)
+          .join('\n');
+
+        alert(
+          `Mohon maaf, beberapa barang yang Anda pilih saat ini tidak tersedia atau telah dinonaktifkan oleh apotek:\n\n${listText}\n\nRincian pembayaran telah diperbarui secara otomatis. Silakan hapus item tersebut dari keranjang Anda untuk melanjutkan.`
+        );
+        setIsPlacingOrder(false);
+        return;
+      }
+
+      // 2. Submit validated order
       const res = await authFetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -275,11 +400,11 @@ export default function CartPage() {
           customerId: user.id,
           customerName: user.full_name || selectedAddress.recipient_name,
           customerPhone: user.phone || selectedAddress.phone,
-          items: selectedList,
-          subtotal,
-          discount: productDiscountTotal + promoDiscount,
-          deliveryFee,
-          total,
+          items: validSelectedItems,
+          subtotal: effectiveSubtotal,
+          discount: effectiveProductDiscountTotal + effectivePromoDiscount,
+          deliveryFee: effectiveDeliveryFee,
+          total: effectiveTotal,
           deliveryOption,
           deliveryAddress: {
             label: selectedAddress.label,
@@ -290,7 +415,7 @@ export default function CartPage() {
           },
           paymentMethod,
           customerNotes,
-          requiresPrescription: hasPrescriptionItems,
+          requiresPrescription: effectiveHasPrescriptionItems,
         }),
       });
 
@@ -385,27 +510,68 @@ export default function CartPage() {
                 </p>
               </div>
 
+              {/* Unavailable Items Global Warning Banner */}
+              {unavailableItemsCount > 0 && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 p-3.5 flex items-start gap-2.5 text-xs text-rose-950 shadow-2xs">
+                  <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <p className="font-bold text-rose-900">
+                      Ada {unavailableItemsCount} produk/paket dalam keranjang Anda yang tidak tersedia atau dinonaktifkan.
+                    </p>
+                    <p className="text-[11px] text-rose-700 leading-relaxed">
+                      Barang yang tidak aktif atau habis stok otomatis tidak dihitung pada total tagihan dan tidak dapat dibeli. Silakan hapus item tersebut dari keranjang.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {/* Cart Item Cards */}
               <div className="space-y-3">
                 {items.map((item) => {
                   const isPrescription = item.product.requires_prescription;
-                  const maxStock = item.variant.stock || 999;
+                  const itemStatus = availabilityMap[item.id];
+                  const isUnavailable = itemStatus !== undefined && !itemStatus.available;
+                  const unavailableReason = itemStatus?.reason || 'Produk atau paket sedang tidak aktif/tersedia';
+                  const maxStock = isUnavailable ? 0 : (itemStatus?.currentStock ?? item.variant.stock ?? 999);
                   const isMaxStockReached = item.quantity >= maxStock;
 
                   return (
                     <div
                       key={item.id}
                       className={`bg-white rounded-3xl border p-4 shadow-stitch transition-all ${
-                        item.selected ? 'border-slate-200' : 'border-slate-200/50 opacity-70'
+                        isUnavailable
+                          ? 'border-rose-200 bg-rose-50/25 ring-1 ring-rose-200/50'
+                          : item.selected
+                          ? 'border-slate-200'
+                          : 'border-slate-200/50 opacity-70'
                       }`}
                     >
+                      {/* Unavailable Notice Banner at top of card */}
+                      {isUnavailable && (
+                        <div className="mb-3 px-3 py-2 rounded-xl bg-rose-50 border border-rose-200/80 flex items-center justify-between gap-2 text-rose-900 text-xs">
+                          <div className="flex items-center gap-1.5 font-bold">
+                            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                            <span className="line-clamp-1">{unavailableReason}</span>
+                          </div>
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-rose-600 text-white shrink-0 shadow-2xs">
+                            Tidak Tersedia
+                          </span>
+                        </div>
+                      )}
+
                       <div className="flex items-start gap-3.5">
                         {/* Item Checkbox */}
                         <button
-                          onClick={() => toggleItemSelection(item.id)}
-                          className="mt-1"
+                          onClick={() => {
+                            if (!isUnavailable) {
+                              toggleItemSelection(item.id);
+                            }
+                          }}
+                          disabled={isUnavailable}
+                          className={`mt-1 ${isUnavailable ? 'cursor-not-allowed opacity-40' : ''}`}
+                          title={isUnavailable ? 'Barang tidak tersedia' : 'Pilih produk'}
                         >
-                          {item.selected ? (
+                          {item.selected && !isUnavailable ? (
                             <CheckSquare className="w-4 h-4 text-sky-600 fill-sky-100" />
                           ) : (
                             <Square className="w-4 h-4 text-slate-300" />
@@ -417,11 +583,20 @@ export default function CartPage() {
                           <img
                             src={item.product.image_url}
                             alt={item.product.name}
-                            className="w-full h-full object-contain mix-blend-multiply"
+                            className={`w-full h-full object-contain mix-blend-multiply ${
+                              isUnavailable ? 'grayscale opacity-50' : ''
+                            }`}
                           />
                           {item.is_bundle && (
                             <div className="absolute bottom-1 right-1 bg-amber-500 text-white p-1 rounded-lg shadow-xs">
                               <Package className="w-3 h-3" />
+                            </div>
+                          )}
+                          {isUnavailable && (
+                            <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-[0.5px] rounded-2xl flex items-center justify-center p-1">
+                              <span className="text-[8px] font-black uppercase text-white bg-rose-600 px-1 py-0.5 rounded">
+                                Nonaktif
+                              </span>
                             </div>
                           )}
                         </div>
@@ -429,6 +604,11 @@ export default function CartPage() {
                         {/* Item Details */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                            {isUnavailable && (
+                              <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-300">
+                                ✕ Tidak Tersedia
+                              </span>
+                            )}
                             {item.is_bundle ? (
                               <>
                                 <span className="text-[9px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500 text-white flex items-center gap-1 shadow-2xs">
@@ -440,7 +620,7 @@ export default function CartPage() {
                                     {item.bundle.category}
                                   </span>
                                 )}
-                                {item.variant.strike_price && item.variant.strike_price > item.variant.price && (
+                                {!isUnavailable && item.variant.strike_price && item.variant.strike_price > item.variant.price && (
                                   <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200">
                                     Hemat {Math.round(((item.variant.strike_price - item.variant.price) / item.variant.strike_price) * 100)}%
                                   </span>
@@ -469,7 +649,7 @@ export default function CartPage() {
                             )}
                           </div>
 
-                          <h4 className="text-xs sm:text-sm font-bold text-slate-900 line-clamp-1">
+                          <h4 className={`text-xs sm:text-sm font-bold line-clamp-1 ${isUnavailable ? 'text-slate-400 line-through' : 'text-slate-900'}`}>
                             {item.product.name}
                           </h4>
 
@@ -494,22 +674,35 @@ export default function CartPage() {
                             </div>
                           ) : (
                             <p className="text-[10px] sm:text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                              Kemasan: <strong className="text-slate-700">{item.variant.name}</strong> ({item.variant.quantity_per_package} {item.variant.unit}) • Sisa Stok: {item.variant.stock}
+                              Kemasan: <strong className="text-slate-700">{item.variant.name}</strong> ({item.variant.quantity_per_package} {item.variant.unit}) • Sisa Stok: {isUnavailable ? 0 : item.variant.stock}
                             </p>
                           )}
 
                           <div className="flex items-baseline gap-1.5 mt-2 flex-wrap">
-                            <span className="text-xs sm:text-sm font-extrabold text-sky-700">
-                              {formatRupiah(item.variant.price)}
-                            </span>
-                            {item.variant.strike_price && item.variant.strike_price > item.variant.price && (
+                            {isUnavailable ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs sm:text-sm font-bold text-slate-400 line-through">
+                                  {formatRupiah(item.variant.price)}
+                                </span>
+                                <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
+                                  Tidak Dihitung
+                                </span>
+                              </div>
+                            ) : (
                               <>
-                                <span className="text-[10px] text-slate-400 line-through">
-                                  {formatRupiah(item.variant.strike_price)}
+                                <span className="text-xs sm:text-sm font-extrabold text-sky-700">
+                                  {formatRupiah(item.variant.price)}
                                 </span>
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
-                                  Hemat {formatRupiah(item.variant.strike_price - item.variant.price)}
-                                </span>
+                                {item.variant.strike_price && item.variant.strike_price > item.variant.price && (
+                                  <>
+                                    <span className="text-[10px] text-slate-400 line-through">
+                                      {formatRupiah(item.variant.strike_price)}
+                                    </span>
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-700 border border-rose-200">
+                                      Hemat {formatRupiah(item.variant.strike_price - item.variant.price)}
+                                    </span>
+                                  </>
+                                )}
                               </>
                             )}
                           </div>
@@ -518,60 +711,77 @@ export default function CartPage() {
 
                       {/* Action Bar (Delete & Quantity Controls) */}
                       <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-100">
-                        <button
-                          onClick={() => removeItem(item.id)}
-                          className="text-[11px] text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          <span>Hapus</span>
-                        </button>
-
-                        <div className="flex items-center gap-2">
-                          {isMaxStockReached && (
-                            <span className="text-[9px] text-amber-600 font-bold hidden sm:inline">
-                              Maks. stok ({maxStock})
+                        {isUnavailable ? (
+                          <div className="w-full flex items-center justify-between gap-2">
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="text-xs text-rose-600 hover:text-rose-700 font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 border border-rose-200 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus Barang Tidak Tersedia</span>
+                            </button>
+                            <span className="text-[10px] text-rose-500 font-semibold italic">
+                              Tidak bisa dicheckout
                             </span>
-                          )}
-                          <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-0.5 bg-slate-50">
-                            <button
-                              onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
-                              disabled={item.quantity <= 1}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
-                            >
-                              <Minus className="w-3 h-3" />
-                            </button>
-
-                            {/* Manual typing quantity input strictly text-center */}
-                            <input
-                              type="number"
-                              min="1"
-                              max={maxStock}
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const typed = parseInt(e.target.value, 10);
-                                if (isNaN(typed) || typed < 1) {
-                                  updateQuantity(item.id, 1);
-                                } else {
-                                  updateQuantity(item.id, Math.min(typed, maxStock));
-                                }
-                              }}
-                              className="w-10 text-center text-xs font-extrabold text-slate-900 bg-white border border-slate-200/80 rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                              style={{ textAlign: 'center' }}
-                            />
-
-                            <button
-                              onClick={() => {
-                                if (item.quantity < maxStock) {
-                                  updateQuantity(item.id, item.quantity + 1);
-                                }
-                              }}
-                              disabled={isMaxStockReached}
-                              className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
-                            >
-                              <Plus className="w-3 h-3" />
-                            </button>
                           </div>
-                        </div>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => removeItem(item.id)}
+                              className="text-[11px] text-slate-400 hover:text-rose-500 font-medium flex items-center gap-1 transition"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              <span>Hapus</span>
+                            </button>
+
+                            <div className="flex items-center gap-2">
+                              {isMaxStockReached && (
+                                <span className="text-[9px] text-amber-600 font-bold hidden sm:inline">
+                                  Maks. stok ({maxStock})
+                                </span>
+                              )}
+                              <div className="flex items-center gap-1 border border-slate-200 rounded-xl p-0.5 bg-slate-50">
+                                <button
+                                  onClick={() => updateQuantity(item.id, Math.max(1, item.quantity - 1))}
+                                  disabled={item.quantity <= 1}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
+                                >
+                                  <Minus className="w-3 h-3" />
+                                </button>
+
+                                {/* Manual typing quantity input strictly text-center */}
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={maxStock}
+                                  value={item.quantity}
+                                  onChange={(e) => {
+                                    const typed = parseInt(e.target.value, 10);
+                                    if (isNaN(typed) || typed < 1) {
+                                      updateQuantity(item.id, 1);
+                                    } else {
+                                      updateQuantity(item.id, Math.min(typed, maxStock));
+                                    }
+                                  }}
+                                  className="w-10 text-center text-xs font-extrabold text-slate-900 bg-white border border-slate-200/80 rounded-lg py-0.5 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                                  style={{ textAlign: 'center' }}
+                                />
+
+                                <button
+                                  onClick={() => {
+                                    if (item.quantity < maxStock) {
+                                      updateQuantity(item.id, item.quantity + 1);
+                                    }
+                                  }}
+                                  disabled={isMaxStockReached}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg bg-white text-slate-700 hover:bg-slate-100 disabled:opacity-40 text-xs font-bold shadow-2xs transition"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </div>
                   );
@@ -579,7 +789,7 @@ export default function CartPage() {
               </div>
 
               {/* Prescription Upload Section (Shown if any selected item is Wajib Resep) */}
-              {hasPrescriptionItems && (
+              {effectiveHasPrescriptionItems && (
                 <div className="bg-rose-50/70 rounded-3xl border border-rose-200 p-4 sm:p-5 space-y-3 shadow-stitch">
                   <div className="flex items-start gap-2.5">
                     <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
@@ -791,7 +1001,7 @@ export default function CartPage() {
                       </div>
                     </div>
                     <span className="text-xs font-bold text-slate-900 shrink-0">
-                      {subtotal >= (storeSettings?.free_delivery_threshold || 100000) && subtotal > 0 ? (
+                      {effectiveSubtotal >= (storeSettings?.free_delivery_threshold || 100000) && effectiveSubtotal > 0 ? (
                         <span className="text-emerald-600">Gratis (Promo)</span>
                       ) : (
                         formatRupiah(storeSettings?.express_delivery_fee || 10000)
@@ -885,16 +1095,16 @@ export default function CartPage() {
                       <span className="text-xs font-bold text-slate-900">
                         Voucher & Promo Farmasi
                       </span>
-                      {appliedPromo && promoDiscount > 0 && (
+                      {appliedPromo && effectivePromoDiscount > 0 && (
                         <span className="px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
                           1 Digunakan
                         </span>
                       )}
                     </div>
                     <p className="text-[11px] font-semibold mt-0.5">
-                      {appliedPromo && promoDiscount > 0 ? (
-                        <span className="text-emerald-700">{appliedPromo.code} • Hemat {formatRupiah(promoDiscount)}</span>
-                      ) : appliedPromo && promoDiscount === 0 ? (
+                      {appliedPromo && effectivePromoDiscount > 0 ? (
+                        <span className="text-emerald-700">{appliedPromo.code} • Hemat {formatRupiah(effectivePromoDiscount)}</span>
+                      ) : appliedPromo && effectivePromoDiscount === 0 ? (
                         <span className="text-amber-700">{appliedPromo.code} • Min. belanja {formatRupiah(appliedPromo.min_order_amount)}</span>
                       ) : (
                         <span className="text-sky-700">Gunakan voucher promo hemat</span>
@@ -1122,16 +1332,16 @@ export default function CartPage() {
                 </h3>
 
                 <div className="flex justify-between text-xs text-slate-600">
-                  <span>Total Harga Produk ({selectedCount} item)</span>
+                  <span>Total Harga Produk ({validSelectedCount} item)</span>
                   <span className="font-semibold text-slate-900">
-                    {formatRupiah(subtotal + productDiscountTotal)}
+                    {formatRupiah(effectiveGrossProductTotal)}
                   </span>
                 </div>
 
-                {productDiscountTotal > 0 && (
+                {effectiveProductDiscountTotal > 0 && (
                   <div className="flex justify-between text-xs text-emerald-600 font-medium">
                     <span>Total Diskon Produk</span>
-                    <span>-{formatRupiah(productDiscountTotal)}</span>
+                    <span>-{formatRupiah(effectiveProductDiscountTotal)}</span>
                   </div>
                 )}
 
@@ -1140,17 +1350,17 @@ export default function CartPage() {
                     Ongkos Kirim ({deliveryOption === 'express' ? 'Kurir Express' : deliveryOption === 'regular' ? 'Reguler' : 'Ambil Sendiri'})
                   </span>
                   <span className="font-semibold text-slate-900">
-                    {deliveryFee === 0 ? 'Gratis' : formatRupiah(deliveryFee)}
+                    {effectiveDeliveryFee === 0 ? 'Gratis' : formatRupiah(effectiveDeliveryFee)}
                   </span>
                 </div>
 
-                {appliedPromo && promoDiscount > 0 && (
+                {appliedPromo && effectivePromoDiscount > 0 && (
                   <div className="flex justify-between text-xs text-emerald-600 font-bold bg-emerald-50/60 p-2 rounded-xl border border-emerald-200/70">
                     <span>Diskon Voucher ({appliedPromo.code})</span>
-                    <span>-{formatRupiah(promoDiscount)}</span>
+                    <span>-{formatRupiah(effectivePromoDiscount)}</span>
                   </div>
                 )}
-                {appliedPromo && promoDiscount === 0 && (
+                {appliedPromo && effectivePromoDiscount === 0 && (
                   <div className="flex justify-between text-xs text-amber-600 font-medium bg-amber-50/50 p-2 rounded-xl border border-amber-200/50">
                     <span>Voucher ({appliedPromo.code})</span>
                     <span className="text-[10px]">Min. belanja {formatRupiah(appliedPromo.min_order_amount)}</span>
@@ -1170,20 +1380,35 @@ export default function CartPage() {
                   </span>
                 </div>
 
+                {unavailableItemsCount > 0 && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[11px] text-rose-800 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>{unavailableItemsCount} item tidak tersedia</strong> dalam keranjang telah dikeluarkan dari total tagihan.
+                    </span>
+                  </div>
+                )}
+
                 <div className="pt-3 border-t border-slate-100 flex justify-between items-center text-sm font-extrabold text-slate-900">
                   <span>Total Tagihan</span>
-                  <span className="text-lg font-extrabold text-sky-700">{formatRupiah(total)}</span>
+                  <span className="text-lg font-extrabold text-sky-700">{formatRupiah(effectiveTotal)}</span>
                 </div>
 
                 {/* Desktop Checkout Action Button */}
                 <div className="hidden lg:block pt-2">
                   <button
                     onClick={handleCheckout}
-                    disabled={isPlacingOrder || selectedCount === 0}
+                    disabled={isPlacingOrder || validSelectedCount === 0 || isValidatingCart}
                     className="w-full py-3.5 px-4 rounded-2xl bg-sky-600 hover:bg-sky-700 active:scale-[0.98] disabled:bg-slate-300 text-white font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-sky-600/25 transition"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    <span>{isPlacingOrder ? 'Memproses Pesanan...' : `Bayar Sekarang (${selectedCount})`}</span>
+                    <span>
+                      {isPlacingOrder
+                        ? 'Memproses Pesanan...'
+                        : isValidatingCart
+                        ? 'Memeriksa Ketersediaan...'
+                        : `Bayar Sekarang (${validSelectedCount})`}
+                    </span>
                   </button>
                   <p className="text-[10px] text-slate-400 text-center mt-2">
                     🔒 Transaksi aman & diawasi apoteker berizin resmi.
@@ -1228,22 +1453,28 @@ export default function CartPage() {
                 <div className="text-[10px] text-slate-400 font-medium">
                   Total:{' '}
                   <span className="text-xs font-extrabold text-sky-700">
-                    {formatRupiah(total)}
+                    {formatRupiah(effectiveTotal)}
                   </span>
                 </div>
                 <div className="text-[10px] text-emerald-600 font-semibold">
-                  Hemat {formatRupiah(productDiscountTotal + promoDiscount)}
+                  Hemat {formatRupiah(effectiveProductDiscountTotal + effectivePromoDiscount)}
                 </div>
               </div>
             </div>
 
             <button
               onClick={handleCheckout}
-              disabled={isPlacingOrder || selectedCount === 0}
+              disabled={isPlacingOrder || validSelectedCount === 0 || isValidatingCart}
               className="flex-1 max-w-[180px] py-3.5 px-4 rounded-2xl bg-sky-600 hover:bg-sky-700 active:scale-95 disabled:bg-slate-300 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-600/25 transition"
             >
               <ShieldCheck className="w-4 h-4" />
-              <span>{isPlacingOrder ? 'Memproses...' : 'Bayar Sekarang'}</span>
+              <span>
+                {isPlacingOrder
+                  ? 'Memproses...'
+                  : isValidatingCart
+                  ? 'Memeriksa...'
+                  : `Bayar (${validSelectedCount})`}
+              </span>
             </button>
           </div>
         </div>
@@ -1543,7 +1774,7 @@ export default function CartPage() {
                   Tidak ada voucher yang dapat digunakan saat ini.
                 </p>
               ) : (
-                availablePromotions.map((p) => {
+                availablePromotions.map((p: Promotion) => {
                   const isCurrent = appliedPromo?.code === p.code;
                   return (
                     <div

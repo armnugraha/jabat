@@ -28,7 +28,9 @@ export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>(mockProducts);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedStatus, setSelectedStatus] = useState<'all' | 'active' | 'inactive'>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [togglingProductId, setTogglingProductId] = useState<string | null>(null);
 
   // Stock management states
   const [updatingVariantId, setUpdatingVariantId] = useState<string | null>(null);
@@ -38,10 +40,10 @@ export default function AdminProductsPage() {
   const [isSavingStock, setIsSavingStock] = useState<boolean>(false);
   const [stockSuccessMessage, setStockSuccessMessage] = useState<string | null>(null);
 
-  // Fetch products from API
+  // Fetch products from API (load all including inactive for admin management)
   const loadProducts = () => {
     setIsLoading(true);
-    fetch('/api/products')
+    fetch('/api/products?all=true')
       .then((res) => res.json())
       .then((json) => {
         if (json.success && json.data) {
@@ -62,13 +64,47 @@ export default function AdminProductsPage() {
       p.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchCategory =
       selectedCategory === 'all' || p.category_id === selectedCategory;
-    return matchQuery && matchCategory;
+    const matchStatus =
+      selectedStatus === 'all' ||
+      (selectedStatus === 'active' ? p.is_active !== false : p.is_active === false);
+    return matchQuery && matchCategory && matchStatus;
   });
 
-  const toggleActive = (id: string) => {
+  const toggleActive = async (id: string) => {
+    const targetProduct = products.find((p) => p.id === id);
+    if (!targetProduct) return;
+    const nextStatus = targetProduct.is_active === false ? true : false;
+
+    // Optimistic UI update
     setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, is_active: !p.is_active } : p))
+      prev.map((p) => (p.id === id ? { ...p, is_active: nextStatus } : p))
     );
+    setTogglingProductId(id);
+
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_active: nextStatus }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        // Revert on failure
+        setProducts((prev) =>
+          prev.map((p) => (p.id === id ? { ...p, is_active: !nextStatus } : p))
+        );
+        alert(json.error || 'Gagal mengubah status aktif produk');
+      }
+    } catch (err) {
+      console.error('Failed toggling product active status:', err);
+      // Revert on failure
+      setProducts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, is_active: !nextStatus } : p))
+      );
+      alert('Terjadi kesalahan jaringan saat mengubah status produk.');
+    } finally {
+      setTogglingProductId(null);
+    }
   };
 
   const deleteProduct = async (id: string) => {
@@ -236,6 +272,16 @@ export default function AdminProductsPage() {
             <option value="c4">Ibu & Anak</option>
             <option value="c5">Alat Kesehatan</option>
           </select>
+
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value as any)}
+            className="w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none"
+          >
+            <option value="all">Semua Status</option>
+            <option value="active">● Hanya Aktif</option>
+            <option value="inactive">○ Hanya Nonaktif</option>
+          </select>
         </div>
       </div>
 
@@ -369,14 +415,21 @@ export default function AdminProductsPage() {
 
                   <td className="py-3.5 px-4 text-center">
                     <button
+                      type="button"
                       onClick={() => toggleActive(p.id)}
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition ${
-                        p.is_active
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-slate-100 text-slate-500 border-slate-200'
-                      }`}
+                      disabled={togglingProductId === p.id}
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold border transition inline-flex items-center gap-1 mx-auto ${
+                        p.is_active !== false
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
+                      } disabled:opacity-50`}
+                      title={p.is_active !== false ? 'Klik untuk menonaktifkan produk' : 'Klik untuk mengaktifkan produk'}
                     >
-                      {p.is_active ? '● Aktif' : '○ Nonaktif'}
+                      {togglingProductId === p.id ? (
+                        <Loader2 className="w-3 h-3 animate-spin text-slate-500" />
+                      ) : (
+                        <span>{p.is_active !== false ? '● Aktif' : '○ Nonaktif'}</span>
+                      )}
                     </button>
                   </td>
 
@@ -520,14 +573,19 @@ export default function AdminProductsPage() {
 
             <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
               <button
+                type="button"
                 onClick={() => toggleActive(p.id)}
-                className={`px-3 py-1 rounded-xl text-xs font-bold border ${
-                  p.is_active
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    : 'bg-slate-100 text-slate-600 border-slate-200'
-                }`}
+                disabled={togglingProductId === p.id}
+                className={`px-3 py-1 rounded-xl text-xs font-bold border transition inline-flex items-center gap-1.5 ${
+                  p.is_active !== false
+                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200'
+                } disabled:opacity-50`}
               >
-                {p.is_active ? 'Aktif' : 'Nonaktif'}
+                {togglingProductId === p.id && (
+                  <Loader2 className="w-3 h-3 animate-spin text-slate-500" />
+                )}
+                <span>{p.is_active !== false ? '● Aktif' : '○ Nonaktif'}</span>
               </button>
 
               <div className="flex items-center gap-1.5">
