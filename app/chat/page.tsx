@@ -325,7 +325,11 @@ export default function ChatPage() {
               <div className="relative">
                 <img
                   src="https://images.unsplash.com/photo-1559839734-2b71ea197ec2?w=100&auto=format&fit=crop&q=80"
-                  alt="apt. Siti Rahma, S.Farm."
+                  alt={
+                    storeSettings?.pharmacist_name && storeSettings.pharmacist_name !== '-'
+                      ? storeSettings.pharmacist_name
+                      : 'Apoteker'
+                  }
                   className="w-10 h-10 rounded-full object-cover border border-slate-200"
                 />
                 <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 border-2 border-white" />
@@ -334,18 +338,23 @@ export default function ChatPage() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <h1 className="text-xs md:text-sm font-bold text-slate-900 leading-tight">
-                    {storeSettings?.pharmacist_name || 'apt. Siti Rahma, S.Farm.'}
+                    {storeSettings?.pharmacist_name && storeSettings.pharmacist_name !== '-'
+                      ? storeSettings.pharmacist_name
+                      : 'Apoteker Farmasi'}
                   </h1>
-                  <CheckCircle2 className="w-4 h-4 text-sky-600 fill-sky-100 shrink-0" />
+                  {storeSettings?.pharmacist_name && storeSettings.pharmacist_name !== '-' && (
+                    <CheckCircle2 className="w-4 h-4 text-sky-600 fill-sky-100 shrink-0" />
+                  )}
                 </div>
-                <p className="text-[10px] md:text-xs text-slate-500 truncate max-w-[260px]">
-                  {(() => {
-                    const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
-                    return lic.hasLicense
-                      ? `Apoteker Penanggung Jawab • ${lic.displayText}`
-                      : 'Apoteker Penanggung Jawab';
-                  })()}
-                </p>
+                {(() => {
+                  const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+                  if (!lic.hasLicense) return null;
+                  return (
+                    <p className="text-[10px] md:text-xs text-slate-500 truncate max-w-[260px]">
+                      {lic.displayText}
+                    </p>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -372,7 +381,7 @@ export default function ChatPage() {
           <AuthRequiredCard
             icon={MessageSquare}
             title="Masuk untuk Konsultasi dengan Apoteker"
-            description="Layanan konsultasi farmasi kami resmi dan terverifikasi oleh Apoteker Penanggung Jawab (SIPA/STR) berstandar Kemenkes RI. Riwayat tanya jawab obat tersimpan aman di akun Anda."
+            description="Layanan konsultasi farmasi kami resmi dan terverifikasi berstandar Kemenkes RI. Riwayat tanya jawab obat tersimpan aman di akun Anda."
             badge="Konsultasi Terverifikasi"
           />
         ) : (
