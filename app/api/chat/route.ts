@@ -14,14 +14,63 @@ const noCacheHeaders = {
   Expires: '0',
 };
 
-const DEFAULT_PHARMACIST_ID = 'ef729fc0-54a1-4091-b083-51d1d0ce44b2';
-const DEFAULT_PHARMACIST_NAME = 'apt. Siti Rahma, S.Farm.';
-
 function isValidUUID(val: any): boolean {
   return (
     typeof val === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val)
   );
+}
+
+// Dynamically resolve a valid staff sender ID that strictly exists in Supabase profiles
+async function resolveStaffSenderId(supabase: any, candidateId?: string | null): Promise<string> {
+  // 1. If candidateId is provided and is a valid UUID, verify if it actually exists in profiles
+  if (candidateId && isValidUUID(candidateId)) {
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('id', candidateId)
+      .maybeSingle();
+    if (existing?.id) {
+      return existing.id;
+    }
+  }
+
+  // 2. Query for an active pharmacist in profiles
+  const { data: pharmacists } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'pharmacist')
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (pharmacists && pharmacists.length > 0 && pharmacists[0].id) {
+    return pharmacists[0].id;
+  }
+
+  // 3. If no pharmacist registered, query for an admin in profiles
+  const { data: admins } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('role', 'admin')
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (admins && admins.length > 0 && admins[0].id) {
+    return admins[0].id;
+  }
+
+  // 4. Fallback to any profile in profiles
+  const { data: anyProf } = await supabase
+    .from('profiles')
+    .select('id')
+    .order('created_at', { ascending: true })
+    .limit(1);
+
+  if (anyProf && anyProf.length > 0 && anyProf[0].id) {
+    return anyProf[0].id;
+  }
+
+  throw new Error('Tidak ditemukan profil pengguna valid di database untuk pengirim pesan.');
 }
 
 // Fast and timeout-safe helper to fetch and format messages without slow recursive RLS joins
@@ -74,10 +123,10 @@ async function fetchConversationMessages(supabase: any, convId: string, customer
   // 4. Map into standard ChatMessage structure
   return messages.map((row: any) => {
     const sender = senderMap.get(row.sender_id);
-    const isCustomer = sender ? sender.role === 'customer' : (customerId ? row.sender_id === customerId : row.sender_id !== DEFAULT_PHARMACIST_ID);
-    const isPharmacist = !isCustomer || row.sender_id === DEFAULT_PHARMACIST_ID || sender?.role === 'pharmacist';
+    const isCustomer = sender ? sender.role === 'customer' : (customerId ? row.sender_id === customerId : false);
+    const isPharmacist = !isCustomer;
 
-    const senderName = sender?.full_name || (isCustomer ? 'Pelanggan' : DEFAULT_PHARMACIST_NAME);
+    const senderName = sender?.full_name || (isCustomer ? 'Pelanggan' : 'Apoteker Farmasi');
     const senderRole = isCustomer ? 'customer' : 'pharmacist';
     const senderAvatar = sender?.avatar_url || null;
 
@@ -101,7 +150,7 @@ async function fetchConversationMessages(supabase: any, convId: string, customer
 
 async function getOpeningMessage(supabase: any): Promise<string> {
   const DEFAULT_MESSAGE =
-    'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
+    'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
 
   if (!supabase) return DEFAULT_MESSAGE;
 
@@ -269,13 +318,18 @@ export async function GET(request: Request) {
         conv = newConv;
 
         const openingMessage = await getOpeningMessage(supabase);
-        // Seed initial welcome message from verified pharmacist in Supabase
-        await supabase.from('messages').insert({
-          conversation_id: conv.id,
-          sender_id: DEFAULT_PHARMACIST_ID,
-          message: openingMessage,
-          is_read: true,
-        });
+        try {
+          const staffSenderId = await resolveStaffSenderId(supabase);
+          // Seed initial welcome message from verified staff/pharmacist in Supabase
+          await supabase.from('messages').insert({
+            conversation_id: conv.id,
+            sender_id: staffSenderId,
+            message: openingMessage,
+            is_read: true,
+          });
+        } catch (err) {
+          console.warn('Could not seed initial welcome message:', err);
+        }
       }
     }
 
@@ -286,16 +340,21 @@ export async function GET(request: Request) {
       // If empty for some reason, seed welcome message
       if (formatted.length === 0) {
         const openingMessage = await getOpeningMessage(supabase);
-        await supabase.from('messages').insert({
-          conversation_id: conv.id,
-          sender_id: DEFAULT_PHARMACIST_ID,
-          message: openingMessage,
-          is_read: true,
-        });
-        formatted = await fetchConversationMessages(supabase, conv.id, userId);
+        try {
+          const staffSenderId = await resolveStaffSenderId(supabase);
+          await supabase.from('messages').insert({
+            conversation_id: conv.id,
+            sender_id: staffSenderId,
+            message: openingMessage,
+            is_read: true,
+          });
+          formatted = await fetchConversationMessages(supabase, conv.id, userId);
+        } catch (err) {
+          console.warn('Could not seed welcome message:', err);
+        }
       } else if (
         formatted.length === 1 &&
-        formatted[0].sender_id === DEFAULT_PHARMACIST_ID
+        formatted[0].sender_role === 'pharmacist'
       ) {
         // If the only message is the initial pharmacist welcome message, keep it synced with updated opening message
         const openingMessage = await getOpeningMessage(supabase);
@@ -335,6 +394,7 @@ export async function POST(request: Request) {
       conversationId,
       senderId,
       senderRole,
+      senderName,
       message,
       recommendedProductId,
       attachmentPath,
@@ -421,9 +481,7 @@ export async function POST(request: Request) {
     const isPharmacist = senderRole === 'pharmacist' || senderRole === 'admin';
 
     if (isPharmacist) {
-      if (!isValidUUID(actualSenderId)) {
-        actualSenderId = DEFAULT_PHARMACIST_ID;
-      }
+      actualSenderId = await resolveStaffSenderId(supabase, actualSenderId);
     } else {
       if (!isValidUUID(actualSenderId)) {
         actualSenderId = userId;
@@ -481,7 +539,7 @@ export async function POST(request: Request) {
       recommendedProductObj = prod || undefined;
     }
 
-    let senderDisplayName = isPharmacist ? DEFAULT_PHARMACIST_NAME : 'Pelanggan';
+    let senderDisplayName = isPharmacist ? (senderName || 'Apoteker Farmasi') : 'Pelanggan';
     let senderDisplayAvatar: string | null = null;
     if (actualSenderId) {
       const { data: prof } = await supabase

@@ -256,7 +256,7 @@ export interface AutoReplyRule {
 }
 
 export const DEFAULT_CHAT_OPENING_MESSAGE =
-  'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Saya apt. Siti Rahma, S.Farm. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
+  'Halo! Selamat datang di Meja Konsultasi Apotek Jabat. Apakah ada keluhan kesehatan, aturan pakai obat, atau resep dokter yang ingin Anda tanyakan?';
 
 export interface AutoReplyConfig {
   enabled: boolean;
@@ -285,6 +285,7 @@ export interface StoreSettings {
   maps_url?: string;
   pharmacist_name: string;
   pharmacist_sipa: string;
+  pharmacist_id?: string | null;
   is_open: boolean;
   opening_time: string;
   closing_time: string;

@@ -287,8 +287,11 @@ export default function ChatPage() {
               userId: user.id,
               conversationId: activeConvId || undefined,
               senderRole: 'pharmacist',
-              senderName: 'apt. Siti Rahma, S.Farm.',
-              senderId: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
+              senderName:
+                storeSettings?.pharmacist_name && storeSettings.pharmacist_name !== '-'
+                  ? storeSettings.pharmacist_name
+                  : 'Apoteker Jabat',
+              senderId: storeSettings?.pharmacist_id || undefined,
               message: replyMessage,
               recommendedProductId: recProductId,
             }),
@@ -375,7 +378,7 @@ export default function ChatPage() {
       </header>
 
       {/* Main Chat Area */}
-      <main className="flex-1 px-4 sm:px-6 md:px-8 py-4 space-y-4 max-w-4xl mx-auto w-full pb-36 md:pb-28">
+      <main className="flex-1 px-4 sm:px-6 md:px-8 py-4 space-y-4 max-w-4xl mx-auto w-full pb-48 md:pb-40">
         {/* If user is NOT logged in, require authentication */}
         {!user ? (
           <AuthRequiredCard
@@ -386,21 +389,6 @@ export default function ChatPage() {
           />
         ) : (
           <>
-            {/* Quick Suggestion Chips (Stitch Screen 5) */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-none pt-1">
-              {quickChips.map((chip, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(chip)}
-                  disabled={isSending || isUploadingAttachment}
-                  className="px-3 py-1.5 rounded-full bg-white border border-sky-200 hover:border-sky-400 text-sky-800 text-[11px] font-medium whitespace-nowrap shadow-2xs transition flex items-center gap-1 active:scale-95 disabled:opacity-50"
-                >
-                  <HelpCircle className="w-3 h-3 text-sky-600" />
-                  <span>{chip}</span>
-                </button>
-              ))}
-            </div>
-
             {/* Timestamp Divider */}
             <div className="text-center my-2">
               <span className="px-3 py-1 rounded-full bg-slate-200/80 text-[10px] font-medium text-slate-600">
@@ -589,7 +577,22 @@ export default function ChatPage() {
 
       {/* Message Input Bar (Only visible when logged in) */}
       {user && (
-        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-4 py-3 shadow-lg">
+        <div className="fixed bottom-16 md:bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200/80 px-4 pt-2 pb-3 shadow-lg">
+          {/* Quick Suggestion Chips (Template Pesan Cepat - Selalu Terjangkau di Bawah) */}
+          <div className="max-w-4xl mx-auto flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-none">
+            {quickChips.map((chip, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendMessage(chip)}
+                disabled={isSending || isUploadingAttachment}
+                className="px-3 py-1.5 rounded-full bg-slate-50 hover:bg-sky-50 border border-slate-200/90 hover:border-sky-300 text-slate-700 hover:text-sky-700 text-[11px] font-medium whitespace-nowrap shadow-2xs transition flex items-center gap-1.5 active:scale-95 disabled:opacity-50 shrink-0"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+                <span>{chip}</span>
+              </button>
+            ))}
+          </div>
+
           {/* Hidden File Input */}
           <input
             type="file"

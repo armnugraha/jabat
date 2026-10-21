@@ -231,12 +231,12 @@ export default function AdminChatPage() {
 
     const messageText = replyText.trim() || 'Berikut rekomendasi obat dari apoteker:';
     const tempId = `temp-${Date.now()}`;
-    const pharmacistName = user?.full_name || 'apt. Siti Rahma, S.Farm.';
+    const pharmacistName = user?.full_name || 'Staf Farmasi';
 
     const tempMsg: ChatMessage = {
       id: tempId,
       conversation_id: selectedConversation.id,
-      sender_id: user?.id || 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
+      sender_id: user?.id || '',
       sender_role: 'pharmacist',
       sender_name: pharmacistName,
       message: messageText,
@@ -264,7 +264,7 @@ export default function AdminChatPage() {
         body: JSON.stringify({
           conversationId: selectedConversation.id,
           userId: selectedConversation.customer_id,
-          senderId: user?.id || 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
+          senderId: user?.id || undefined,
           senderRole: 'pharmacist',
           senderName: pharmacistName,
           message: messageText,
