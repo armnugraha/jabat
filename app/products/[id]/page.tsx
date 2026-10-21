@@ -37,7 +37,7 @@ import { Product, ProductVariant, StoreSettings, BundlingPackage } from '@/lib/t
 import { useCart } from '@/lib/store/cart-context';
 import { useWishlist } from '@/lib/store/wishlist-context';
 import { useAuth } from '@/lib/store/auth-context';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, parsePharmacistLicense } from '@/lib/utils';
 import { ProductVariantSelector } from '@/components/customer/ProductVariantSelector';
 
 export default function ProductDetailPage() {
@@ -515,7 +515,7 @@ export default function ProductDetailPage() {
               </div>
               <div className="flex items-center gap-2 text-[11px] font-medium">
                 <Award className="w-4 h-4 text-sky-600 shrink-0" />
-                <span>Apoteker Ber-SIPA</span>
+                <span>Apoteker Berizin Resmi</span>
               </div>
             </div>
           </div>
@@ -652,7 +652,10 @@ export default function ProductDetailPage() {
                     {store.pharmacist_name || mockStoreSettings.pharmacist_name}
                   </div>
                   <div className="text-[9px] text-slate-500 mt-1 font-mono truncate">
-                    SIPA: {store.pharmacist_sipa || '19870412/SIPA/2021'}
+                    {(() => {
+                      const lic = parsePharmacistLicense(store.pharmacist_sipa);
+                      return lic.hasLicense ? lic.displayText : 'SIPA: -';
+                    })()}
                   </div>
                 </div>
               </div>

@@ -26,7 +26,7 @@ import { AuthRequiredCard } from '@/components/customer/AuthRequiredCard';
 import { ChatMessage, Product, AutoReplyConfig, StoreSettings } from '@/lib/types';
 import { useCart } from '@/lib/store/cart-context';
 import { useAuth } from '@/lib/store/auth-context';
-import { formatRupiah, formatChatTime } from '@/lib/utils';
+import { formatRupiah, formatChatTime, parsePharmacistLicense } from '@/lib/utils';
 
 export default function ChatPage() {
   const router = useRouter();
@@ -339,9 +339,12 @@ export default function ChatPage() {
                   <CheckCircle2 className="w-4 h-4 text-sky-600 fill-sky-100 shrink-0" />
                 </div>
                 <p className="text-[10px] md:text-xs text-slate-500 truncate max-w-[260px]">
-                  {storeSettings?.pharmacist_sipa && storeSettings.pharmacist_sipa.trim() !== ''
-                    ? `Apoteker Penanggung Jawab • SIPA: ${storeSettings.pharmacist_sipa}`
-                    : 'Apoteker Penanggung Jawab'}
+                  {(() => {
+                    const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+                    return lic.hasLicense
+                      ? `Apoteker Penanggung Jawab • ${lic.displayText}`
+                      : 'Apoteker Penanggung Jawab';
+                  })()}
                 </p>
               </div>
             </div>
@@ -369,7 +372,7 @@ export default function ChatPage() {
           <AuthRequiredCard
             icon={MessageSquare}
             title="Masuk untuk Konsultasi dengan Apoteker"
-            description="Layanan konsultasi farmasi kami resmi dan terverifikasi oleh Apoteker Penanggung Jawab (SIPA) berstandar Kemenkes RI. Riwayat tanya jawab obat tersimpan aman di akun Anda."
+            description="Layanan konsultasi farmasi kami resmi dan terverifikasi oleh Apoteker Penanggung Jawab (SIPA/STR) berstandar Kemenkes RI. Riwayat tanya jawab obat tersimpan aman di akun Anda."
             badge="Konsultasi Terverifikasi"
           />
         ) : (

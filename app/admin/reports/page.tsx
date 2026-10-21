@@ -30,7 +30,7 @@ import {
   Tag,
   AlertTriangle,
 } from 'lucide-react';
-import { formatRupiah, getOrderStatusBadge, getPaymentStatusBadge } from '@/lib/utils';
+import { formatRupiah, getOrderStatusBadge, getPaymentStatusBadge, parsePharmacistLicense } from '@/lib/utils';
 import { Order, Product, StoreSettings } from '@/lib/types';
 import {
   formatDate,
@@ -1149,7 +1149,11 @@ export default function AdminReportsPage() {
                     {storeSettings?.address || 'Jl. Raya Apotek No. 42'} • Telp: {storeSettings?.phone || '0812-3456-7890'}
                   </p>
                   <p className="text-[11px] text-slate-500">
-                    Apoteker PJ: <strong>{storeSettings?.pharmacist_name || 'apt. Siti Rahma, S.Farm.'}</strong> (SIPA: {storeSettings?.pharmacist_sipa || '-'})
+                    Apoteker PJ: <strong>{storeSettings?.pharmacist_name || 'apt. Siti Rahma, S.Farm.'}</strong>{' '}
+                    {(() => {
+                      const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+                      return lic.hasLicense ? `(${lic.displayText})` : '';
+                    })()}
                   </p>
                 </div>
 

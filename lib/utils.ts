@@ -116,3 +116,94 @@ export function formatChatTime(dateStr?: string): string {
   }
 }
 
+export type LicenseType = 'SIPA' | 'STR' | 'Asnakes' | '';
+
+export interface ParsedLicense {
+  type: LicenseType;
+  id: string;
+  hasLicense: boolean;
+  displayText: string;
+  label: string;
+}
+
+export function parsePharmacistLicense(value?: string | null): ParsedLicense {
+  if (!value || typeof value !== 'string' || !value.trim() || value.trim() === '-') {
+    return {
+      type: '',
+      id: '',
+      hasLicense: false,
+      displayText: '',
+      label: 'Izin Praktik',
+    };
+  }
+
+  const clean = value.trim();
+
+  // Pattern 1: Explicit prefix like "SIPA: 123", "STR: 123", "Asnakes: 123"
+  const prefixMatch = clean.match(/^(SIPA|STR|Asnakes)\s*[:\-]\s*(.*)$/i);
+  if (prefixMatch) {
+    const rawType = prefixMatch[1].toUpperCase();
+    const type: LicenseType = rawType === 'ASNAKES' ? 'Asnakes' : (rawType as 'SIPA' | 'STR');
+    const id = prefixMatch[2].trim();
+    return {
+      type,
+      id,
+      hasLicense: !!id,
+      displayText: id ? `${type}: ${id}` : type,
+      label: type,
+    };
+  }
+
+  // Pattern 2: Contains STR (e.g. STRA, STRTTK, or /STR-)
+  if (/\bstr\b/i.test(clean) || /\/str/i.test(clean) || /-str/i.test(clean)) {
+    return {
+      type: 'STR',
+      id: clean,
+      hasLicense: true,
+      displayText: `STR: ${clean}`,
+      label: 'STR',
+    };
+  }
+
+  // Pattern 3: Contains Asnakes
+  if (/asnakes/i.test(clean)) {
+    return {
+      type: 'Asnakes',
+      id: clean,
+      hasLicense: true,
+      displayText: `Asnakes: ${clean}`,
+      label: 'Asnakes',
+    };
+  }
+
+  // Pattern 4: Contains SIPA
+  if (/sipa/i.test(clean)) {
+    return {
+      type: 'SIPA',
+      id: clean,
+      hasLicense: true,
+      displayText: clean.toUpperCase().startsWith('SIPA') ? clean : `SIPA: ${clean}`,
+      label: 'SIPA',
+    };
+  }
+
+  // Fallback: If non-empty but without specific prefix, treat as SIPA default
+  return {
+    type: 'SIPA',
+    id: clean,
+    displayText: `SIPA: ${clean}`,
+    label: 'SIPA',
+    hasLicense: true,
+  };
+}
+
+export function formatPharmacistLicense(type: LicenseType, id: string): string {
+  let cleanId = id.trim();
+  if (!cleanId) return '';
+  if (!type) return cleanId;
+  const redundantPrefixRegex = new RegExp(`^${type}\\s*[:\\-]\\s*`, 'i');
+  cleanId = cleanId.replace(redundantPrefixRegex, '').trim();
+  if (!cleanId) return '';
+  return `${type}: ${cleanId}`;
+}
+

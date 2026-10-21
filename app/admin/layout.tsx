@@ -26,6 +26,7 @@ import {
 import { UserAvatar } from '@/components/customer/UserAvatar';
 import { useAuth } from '@/lib/store/auth-context';
 import { StoreSettings, Order } from '@/lib/types';
+import { parsePharmacistLicense } from '@/lib/utils';
 
 export default function AdminLayout({
   children,
@@ -196,7 +197,10 @@ export default function AdminLayout({
                 {storeSettings?.store_name || 'Apotek Jabat'}
               </h1>
               <p className="text-[10px] text-slate-500">
-                SIPA Farmasi: {storeSettings?.pharmacist_sipa || '-'}
+                {(() => {
+                  const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+                  return lic.hasLicense ? `${lic.type} Farmasi: ${lic.id}` : 'SIPA Farmasi: -';
+                })()}
               </p>
             </div>
           </div>

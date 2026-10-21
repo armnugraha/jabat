@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Sparkles, Bike, MessageCircle, Building2, UserCheck, FileText, ChevronRight } from 'lucide-react';
 import { StoreSettings } from '@/lib/types';
+import { parsePharmacistLicense } from '@/lib/utils';
 
 export const HeroBanner: React.FC = () => {
   return (
@@ -122,15 +123,21 @@ export const StoreInfoFooterCard: React.FC = () => {
         <div className="flex items-center gap-2">
           <UserCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
           <span>
-            Apoteker PJ: <strong className="text-slate-800">{store?.pharmacist_name || 'apt. Siti Rahma, S.Farm.'}</strong>
+            Apoteker PJ: <strong className="text-slate-800">{store?.pharmacist_name || '-'}</strong>
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <FileText className="w-3.5 h-3.5 text-sky-600 shrink-0" />
-          <span>
-            Nomor SIPA: <span className="font-mono text-slate-700">{store?.pharmacist_sipa || '-'}</span>
-          </span>
-        </div>
+        {(() => {
+          const lic = parsePharmacistLicense(store?.pharmacist_sipa);
+          return (
+            <div className="flex items-center gap-2">
+              <FileText className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              <span>
+                {lic.hasLicense ? `Nomor ${lic.type}:` : 'Nomor SIPA:'}{' '}
+                <span className="font-mono text-slate-700">{lic.hasLicense ? lic.id : '-'}</span>
+              </span>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );

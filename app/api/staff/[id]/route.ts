@@ -88,13 +88,6 @@ export async function PUT(
       );
     }
 
-    if (role === 'pharmacist' && sipa_number !== undefined && !sipa_number?.trim()) {
-      return NextResponse.json(
-        { success: false, error: 'Nomor SIPA wajib diisi untuk peran Apoteker.' },
-        { status: 400, headers: noCacheHeaders }
-      );
-    }
-
     if (isSupabaseConfigured()) {
       const adminClient = await getSupabaseAdminClient();
       const dbClient = adminClient || supabase;
@@ -126,13 +119,29 @@ export async function PUT(
         );
       }
 
-      // Automatically sync store_settings if this is a pharmacist or role updated
-      if (data && (data.role === 'pharmacist' || role === 'pharmacist')) {
+      // Automatically sync store_settings with active pharmacist (or reset to dash if none)
+      const { data: currentPharmacists } = await dbClient
+        .from('profiles')
+        .select('full_name, sipa_number')
+        .eq('role', 'pharmacist')
+        .order('created_at', { ascending: true })
+        .limit(1);
+
+      if (currentPharmacists && currentPharmacists.length > 0) {
         await dbClient
           .from('store_settings')
           .update({
-            pharmacist_name: data.full_name,
-            pharmacist_sipa: data.sipa_number || '',
+            pharmacist_name: currentPharmacists[0].full_name,
+            pharmacist_sipa: currentPharmacists[0].sipa_number || '',
+            updated_at: new Date().toISOString(),
+          })
+          .not('id', 'is', null);
+      } else {
+        await dbClient
+          .from('store_settings')
+          .update({
+            pharmacist_name: '-',
+            pharmacist_sipa: '',
             updated_at: new Date().toISOString(),
           })
           .not('id', 'is', null);
@@ -220,6 +229,15 @@ export async function DELETE(
           .update({
             pharmacist_name: remainingPharmacists[0].full_name,
             pharmacist_sipa: remainingPharmacists[0].sipa_number || '',
+            updated_at: new Date().toISOString(),
+          })
+          .not('id', 'is', null);
+      } else {
+        await dbClient
+          .from('store_settings')
+          .update({
+            pharmacist_name: '-',
+            pharmacist_sipa: '',
             updated_at: new Date().toISOString(),
           })
           .not('id', 'is', null);

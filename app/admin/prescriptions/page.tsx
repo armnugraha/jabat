@@ -17,7 +17,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Order, PrescriptionStatus, StoreSettings } from '@/lib/types';
-import { formatRupiah } from '@/lib/utils';
+import { formatRupiah, parsePharmacistLicense } from '@/lib/utils';
 
 export default function AdminPrescriptionsPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -119,7 +119,14 @@ export default function AdminPrescriptionsPage() {
         <div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-bold uppercase tracking-wider mb-1">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Kewenangan Apoteker PJ ({storeSettings?.pharmacist_sipa || 'SIPA Resmi'})</span>
+            <span>
+              Kewenangan Apoteker PJ (
+              {(() => {
+                const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+                return lic.hasLicense ? lic.displayText : '-';
+              })()}
+              )
+            </span>
           </div>
           <h2 className="text-lg font-extrabold text-slate-900">
             Meja Verifikasi Resep Dokter

@@ -34,6 +34,7 @@ import { BottomNav } from '@/components/customer/BottomNav';
 import { UserAvatar } from '@/components/customer/UserAvatar';
 import { useAuth } from '@/lib/store/auth-context';
 import { StoreSettings, CustomerAddress } from '@/lib/types';
+import { LicenseType, parsePharmacistLicense, formatPharmacistLicense } from '@/lib/utils';
 
 function AccountContent() {
   const router = useRouter();
@@ -53,7 +54,8 @@ function AccountContent() {
   const [editFullName, setEditFullName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editAvatarUrl, setEditAvatarUrl] = useState('');
-  const [editSipaNumber, setEditSipaNumber] = useState('');
+  const [editLicenseType, setEditLicenseType] = useState<LicenseType>('SIPA');
+  const [editLicenseId, setEditLicenseId] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
 
@@ -275,7 +277,9 @@ function AccountContent() {
     setEditFullName(user.full_name || '');
     setEditPhone(user.phone || '');
     setEditAvatarUrl(user.avatar_url || '');
-    setEditSipaNumber(user.sipa_number || '');
+    const parsedLic = parsePharmacistLicense(user.sipa_number);
+    setEditLicenseType(parsedLic.type);
+    setEditLicenseId(parsedLic.id);
     setIsEditProfileOpen(true);
   };
 
@@ -322,6 +326,8 @@ function AccountContent() {
       return;
     }
 
+    const finalSipaNumber = editLicenseType ? formatPharmacistLicense(editLicenseType, editLicenseId) : null;
+
     setIsSavingProfile(true);
     try {
       const res = await authFetch('/api/profile', {
@@ -332,7 +338,7 @@ function AccountContent() {
           fullName: editFullName.trim(),
           phone: editPhone.trim(),
           avatarUrl: editAvatarUrl.trim() || null,
-          sipaNumber: editSipaNumber.trim() || null,
+          sipaNumber: finalSipaNumber,
         }),
       });
 
@@ -342,7 +348,7 @@ function AccountContent() {
           full_name: editFullName.trim(),
           phone: editPhone.trim(),
           avatar_url: editAvatarUrl.trim() || undefined,
-          sipa_number: editSipaNumber.trim() || undefined,
+          sipa_number: finalSipaNumber || undefined,
         });
 
         setIsEditProfileOpen(false);
@@ -625,11 +631,14 @@ function AccountContent() {
                         {user.email}
                       </p>
                     )}
-                    {user.sipa_number && (
-                      <p className="text-[10px] text-emerald-700 font-mono font-bold mt-0.5 truncate">
-                        SIPA: {user.sipa_number}
-                      </p>
-                    )}
+                    {user.sipa_number && (() => {
+                      const lic = parsePharmacistLicense(user.sipa_number);
+                      return lic.hasLicense ? (
+                        <p className="text-[10px] text-emerald-700 font-mono font-bold mt-0.5 truncate">
+                          {lic.displayText}
+                        </p>
+                      ) : null;
+                    })()}
                     <span className="inline-block mt-2 px-2.5 py-0.5 rounded-md bg-sky-50 text-sky-700 text-[10px] font-bold capitalize">
                       Role: {user.role === 'pharmacist' ? 'Apoteker PJ' : user.role === 'admin' ? 'Administrator' : 'Pasien Terdaftar'}
                     </span>
@@ -1130,17 +1139,46 @@ function AccountContent() {
               </div>
 
               {(user?.role === 'pharmacist' || user?.role === 'admin') && (
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    Nomor SIPA (Surat Izin Praktik Apoteker)
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    Nomor Izin Praktik (SIPA / STR / Asnakes)
                   </label>
-                  <input
-                    type="text"
-                    value={editSipaNumber}
-                    onChange={(e) => setEditSipaNumber(e.target.value)}
-                    placeholder="19870412/SIPA-31.74/2021/2048"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-mono"
-                  />
+                  <div className="grid grid-cols-12 gap-2">
+                    <div className="col-span-5">
+                      <select
+                        value={editLicenseType}
+                        onChange={(e) => {
+                          const nextType = e.target.value as LicenseType;
+                          setEditLicenseType(nextType);
+                          if (!nextType) setEditLicenseId('');
+                        }}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 px-2 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
+                      >
+                        <option value="">-- Dikosongkan --</option>
+                        <option value="SIPA">SIPA</option>
+                        <option value="STR">STR</option>
+                        <option value="Asnakes">Asnakes</option>
+                      </select>
+                    </div>
+                    <div className="col-span-7">
+                      <input
+                        type="text"
+                        disabled={!editLicenseType}
+                        value={editLicenseId}
+                        onChange={(e) => setEditLicenseId(e.target.value)}
+                        placeholder={
+                          !editLicenseType
+                            ? 'Dikosongkan'
+                            : editLicenseType === 'SIPA'
+                            ? 'Contoh: 19870412/SIPA-31.74/...'
+                            : editLicenseType === 'STR'
+                            ? 'Contoh: 19870412/STRA-UI/...'
+                            : 'Contoh: ASN-3174-...'
+                        }
+                        className="w-full bg-slate-50 disabled:bg-slate-100 disabled:text-slate-400 border border-slate-200 rounded-xl py-2 px-3 text-xs focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500 font-mono"
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 

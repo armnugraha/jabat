@@ -303,7 +303,7 @@ export default function AdminChatPage() {
             </span>
           </h2>
           <p className="text-xs text-slate-500">
-            Layanan tanya jawab resep obat, keluhan pasien, dan edukasi farmasi resmi berstandar SIPA Kemenkes RI
+            Layanan tanya jawab resep obat, keluhan pasien, dan edukasi farmasi resmi berstandar izin praktik Kemenkes RI
           </p>
         </div>
 

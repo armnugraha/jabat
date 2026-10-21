@@ -85,7 +85,7 @@ export async function GET(request: Request) {
         phone: '081298765432',
         email: 'apoteker@jabat.id',
         avatar_url: null,
-        sipa_number: '19870412/SIPA-31.74/2021/2048',
+        sipa_number: null,
         created_at: new Date().toISOString(),
       },
     ];
@@ -141,13 +141,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (role === 'pharmacist' && (!sipa_number || !sipa_number.trim())) {
-      return NextResponse.json(
-        { success: false, error: 'Nomor SIPA wajib diisi untuk peran Apoteker.' },
-        { status: 400, headers: noCacheHeaders }
-      );
-    }
-
+    const cleanSipa = sipa_number && typeof sipa_number === 'string' && sipa_number.trim() ? sipa_number.trim() : null;
     const defaultPassword = password && password.trim().length >= 6 ? password.trim() : 'Password123!';
     const cleanPhone = phone ? phone.trim() : '';
 
@@ -164,7 +158,7 @@ export async function POST(request: Request) {
             full_name: full_name.trim(),
             phone: cleanPhone,
             role,
-            sipa_number: role === 'pharmacist' ? sipa_number.trim() : null,
+            sipa_number: role === 'pharmacist' ? cleanSipa : null,
           },
         },
       });
@@ -193,7 +187,7 @@ export async function POST(request: Request) {
           full_name: full_name.trim(),
           phone: cleanPhone,
           role,
-          sipa_number: role === 'pharmacist' ? sipa_number.trim() : null,
+          sipa_number: role === 'pharmacist' ? cleanSipa : null,
           updated_at: new Date().toISOString(),
         })
         .select()
@@ -227,7 +221,7 @@ export async function POST(request: Request) {
       email: email.trim().toLowerCase(),
       phone: cleanPhone,
       role,
-      sipa_number: role === 'pharmacist' ? sipa_number.trim() : null,
+      sipa_number: role === 'pharmacist' ? cleanSipa : null,
       avatar_url: null,
       created_at: new Date().toISOString(),
     };

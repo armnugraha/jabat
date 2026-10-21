@@ -22,6 +22,11 @@ import {
 } from 'lucide-react';
 import { UserAvatar } from '@/components/customer/UserAvatar';
 import { UserRole } from '@/lib/types';
+import {
+  LicenseType,
+  parsePharmacistLicense,
+  formatPharmacistLicense,
+} from '@/lib/utils';
 
 interface StaffMember {
   id: string;
@@ -57,7 +62,8 @@ export default function AdminStaffPage() {
     email: '',
     phone: '',
     role: 'pharmacist' as 'admin' | 'pharmacist',
-    sipa_number: '',
+    license_type: 'SIPA' as LicenseType,
+    license_id: '',
     password: '',
   });
 
@@ -92,7 +98,8 @@ export default function AdminStaffPage() {
       email: '',
       phone: '',
       role: 'pharmacist',
-      sipa_number: '',
+      license_type: 'SIPA',
+      license_id: '',
       password: '',
     });
     setFormError(null);
@@ -101,12 +108,14 @@ export default function AdminStaffPage() {
 
   const openEditModal = (staff: StaffMember) => {
     setEditingStaff(staff);
+    const parsedLic = parsePharmacistLicense(staff.sipa_number);
     setFormData({
       full_name: staff.full_name || '',
       email: staff.email || '',
       phone: staff.phone || '',
       role: staff.role === 'admin' ? 'admin' : 'pharmacist',
-      sipa_number: staff.sipa_number || '',
+      license_type: parsedLic.type,
+      license_id: parsedLic.id,
       password: '',
     });
     setFormError(null);
@@ -136,18 +145,16 @@ export default function AdminStaffPage() {
       return;
     }
 
-    // If changing to pharmacist without SIPA, prompt or warn
+    // If changing to pharmacist without license, prompt optionally
     let targetSipa = staff.sipa_number;
     if (nextRole === 'pharmacist' && !targetSipa) {
       const inputSipa = prompt(
-        'Masukkan nomor SIPA resmi untuk apoteker ini:',
-        '19870412/SIPA-31.74/2021/2048'
+        'Masukkan nomor izin resmi apoteker (SIPA, STR, atau Asnakes - contoh: "SIPA: 19870412/..." atau kosongkan jika belum ada):',
+        ''
       );
-      if (!inputSipa) {
-        alert('Pengubahan peran ke Apoteker dibatalkan karena nomor SIPA tidak diisi.');
-        return;
+      if (inputSipa !== null && inputSipa.trim()) {
+        targetSipa = inputSipa.trim();
       }
-      targetSipa = inputSipa.trim();
     }
 
     // Optimistic UI update
@@ -223,9 +230,15 @@ export default function AdminStaffPage() {
       return;
     }
 
-    if (formData.role === 'pharmacist' && !formData.sipa_number.trim()) {
-      setFormError('Nomor SIPA wajib diisi untuk peran Apoteker Penanggung Jawab.');
-      return;
+    let finalSipaNumber: string | null = null;
+    if (formData.role === 'pharmacist') {
+      if (formData.license_type && !formData.license_id.trim()) {
+        setFormError(`Harap masukkan nomor ID ${formData.license_type} atau pilih "-- Dikosongkan --" jika belum memiliki izin.`);
+        return;
+      }
+      finalSipaNumber = formData.license_type
+        ? formatPharmacistLicense(formData.license_type, formData.license_id) || null
+        : null;
     }
 
     setIsSubmitting(true);
@@ -239,7 +252,7 @@ export default function AdminStaffPage() {
             full_name: formData.full_name.trim(),
             phone: formData.phone.trim(),
             role: formData.role,
-            sipa_number: formData.role === 'pharmacist' ? formData.sipa_number.trim() : null,
+            sipa_number: finalSipaNumber,
           }),
         });
         const json = await res.json();
@@ -255,7 +268,7 @@ export default function AdminStaffPage() {
                   full_name: formData.full_name.trim(),
                   phone: formData.phone.trim(),
                   role: formData.role,
-                  sipa_number: formData.role === 'pharmacist' ? formData.sipa_number.trim() : null,
+                  sipa_number: finalSipaNumber,
                 }
               : s
           )
@@ -263,10 +276,19 @@ export default function AdminStaffPage() {
         showToast('Data staf berhasil diperbarui.');
       } else {
         // Create new staff
+        const payload = {
+          full_name: formData.full_name.trim(),
+          email: formData.email.trim(),
+          phone: formData.phone.trim(),
+          role: formData.role,
+          sipa_number: finalSipaNumber,
+          password: formData.password,
+        };
+
         const res = await fetch('/api/staff', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
+          body: JSON.stringify(payload),
         });
         const json = await res.json();
         if (!json.success) {
@@ -446,7 +468,7 @@ export default function AdminStaffPage() {
               <tr>
                 <th className="py-3.5 px-4">Nama Staf & Foto</th>
                 <th className="py-3.5 px-4">Peran & Hak Akses</th>
-                <th className="py-3.5 px-4">Nomor SIPA Resmi</th>
+                <th className="py-3.5 px-4">Nomor Izin Resmi (SIPA / STR / Asnakes)</th>
                 <th className="py-3.5 px-4">Kontak (WhatsApp & Email)</th>
                 <th className="py-3.5 px-4 text-right">Aksi</th>
               </tr>
@@ -511,28 +533,44 @@ export default function AdminStaffPage() {
 
                     <td className="py-3.5 px-4">
                       {isPharmacist ? (
-                        staff.sipa_number ? (
-                          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 font-mono text-[11px] text-slate-800">
-                            <span>{staff.sipa_number}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopySipa(staff.id, staff.sipa_number!)}
-                              className="text-slate-400 hover:text-sky-600 transition"
-                              title="Salin Nomor SIPA"
-                            >
-                              {copiedSipaId === staff.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-semibold">
-                            <AlertCircle className="w-3 h-3 text-amber-500" />
-                            SIPA Belum Diisi
-                          </span>
-                        )
+                        (() => {
+                          const lic = parsePharmacistLicense(staff.sipa_number);
+                          if (lic.hasLicense) {
+                            return (
+                              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-50 border border-slate-200 font-mono text-[11px] text-slate-800">
+                                <span
+                                  className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    lic.type === 'SIPA'
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                      : lic.type === 'STR'
+                                      ? 'bg-sky-100 text-sky-800 border border-sky-200'
+                                      : 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  }`}
+                                >
+                                  {lic.type || 'IZIN'}
+                                </span>
+                                <span>{lic.id}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopySipa(staff.id, lic.displayText)}
+                                  className="text-slate-400 hover:text-sky-600 transition"
+                                  title={`Salin ${lic.displayText}`}
+                                >
+                                  {copiedSipaId === staff.id ? (
+                                    <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                  ) : (
+                                    <Copy className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              </div>
+                            );
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-medium">
+                              Dikosongkan
+                            </span>
+                          );
+                        })()
                       ) : (
                         <span className="text-slate-400 text-[11px] italic">
                           Akses Manajemen Sistem
@@ -663,18 +701,25 @@ export default function AdminStaffPage() {
 
                 <div className="pt-2 border-t border-slate-100 space-y-1.5 text-xs">
                   {isPharmacist && (
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-400 text-[11px]">No. SIPA:</span>
-                      {staff.sipa_number ? (
-                        <span className="font-mono text-[11px] font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
-                          {staff.sipa_number}
-                        </span>
-                      ) : (
-                        <span className="text-[10px] text-amber-600 font-semibold">
-                          Belum diisi
-                        </span>
-                      )}
-                    </div>
+                    (() => {
+                      const lic = parsePharmacistLicense(staff.sipa_number);
+                      return (
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400 text-[11px]">
+                            {lic.hasLicense ? `No. ${lic.type}:` : 'Izin Praktik:'}
+                          </span>
+                          {lic.hasLicense ? (
+                            <span className="font-mono text-[11px] font-bold text-slate-800 bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                              {lic.id}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 font-medium italic">
+                              Dikosongkan
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
 
                   <div className="flex items-center justify-between">
@@ -793,23 +838,64 @@ export default function AdminStaffPage() {
                 />
               </div>
 
-              {/* SIPA Number (Only when role is pharmacist) */}
+              {/* License Dropdown & ID Number (Only when role is pharmacist) */}
               {formData.role === 'pharmacist' && (
-                <div className="p-3 rounded-2xl bg-emerald-50/40 border border-emerald-200/80 space-y-1">
-                  <label className="text-xs font-bold text-emerald-950 flex items-center justify-between">
-                    <span>Nomor SIPA Resmi Kemenkes RI:</span>
-                    <span className="text-[10px] font-normal text-emerald-700">*Wajib untuk Apoteker</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.sipa_number}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, sipa_number: e.target.value }))}
-                    placeholder="Contoh: 19870412/SIPA-31.74/2021/2048"
-                    className="w-full bg-white border border-emerald-300 rounded-xl py-2 px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
-                  />
-                  <p className="text-[10px] text-emerald-700">
-                    Nomor ini akan dicantumkan secara resmi di ruang konsultasi chat pasien dan verifikasi resep.
+                <div className="p-3.5 rounded-2xl bg-emerald-50/50 border border-emerald-200/90 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Nomor Izin Praktik (SIPA / STR / Asnakes):</span>
+                    </label>
+                    <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                      Bisa dikosongkan
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2">
+                    <div className="sm:col-span-5">
+                      <select
+                        value={formData.license_type}
+                        onChange={(e) => {
+                          const nextType = e.target.value as LicenseType;
+                          setFormData((prev) => ({
+                            ...prev,
+                            license_type: nextType,
+                            license_id: nextType ? prev.license_id : '',
+                          }));
+                        }}
+                        className="w-full bg-white border border-emerald-300 rounded-xl py-2 px-2.5 text-xs font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      >
+                        <option value="">-- Dikosongkan --</option>
+                        <option value="SIPA">SIPA</option>
+                        <option value="STR">STR</option>
+                        <option value="Asnakes">Asnakes</option>
+                      </select>
+                    </div>
+
+                    <div className="sm:col-span-7">
+                      <input
+                        type="text"
+                        disabled={!formData.license_type}
+                        value={formData.license_id}
+                        onChange={(e) => setFormData((prev) => ({ ...prev, license_id: e.target.value }))}
+                        placeholder={
+                          !formData.license_type
+                            ? 'Dikosongkan (tanpa ID)'
+                            : formData.license_type === 'SIPA'
+                            ? 'Contoh: 19870412/SIPA-31.74/2021/2048'
+                            : formData.license_type === 'STR'
+                            ? 'Contoh: 19870412/STRA-UI/2020/234567'
+                            : 'Contoh: ASN-3174-2023-001'
+                        }
+                        className="w-full bg-white disabled:bg-slate-100/80 disabled:text-slate-400 border border-emerald-300 rounded-xl py-2 px-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <p className="text-[10px] text-emerald-800 leading-snug">
+                    {formData.license_type
+                      ? `Nomor ${formData.license_type} akan dicantumkan secara resmi di ruang konsultasi chat pasien, verifikasi resep, dan faktur.`
+                      : 'Opsi dikosongkan dipilih: akun apoteker akan dibuat tanpa nomor lisensi praktik.'}
                   </p>
                 </div>
               )}

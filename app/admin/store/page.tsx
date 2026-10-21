@@ -31,7 +31,7 @@ export default function AdminStoreSettingsPage() {
     whatsapp: '6281234567890',
     email: 'layanan@jabat.id',
     pharmacist_name: 'apt. Siti Rahma, S.Farm.',
-    pharmacist_sipa: '19870412/SIPA-31.74/2021/2048',
+    pharmacist_sipa: '',
     is_open: true,
     opening_time: '08:00',
     closing_time: '21:00',
@@ -171,7 +171,7 @@ export default function AdminStoreSettingsPage() {
             Pengaturan Apotek & Layanan Farmasi
           </h2>
           <p className="text-xs text-slate-500">
-            Konfigurasi jam operasional, SIPA Apoteker, QRIS pembayaran, kurir pengiriman, dan rekening bank
+            Konfigurasi jam operasional, Izin Praktik Apoteker (SIPA/STR/Asnakes), QRIS pembayaran, kurir pengiriman, dan rekening bank
           </p>
         </div>
 
@@ -189,7 +189,7 @@ export default function AdminStoreSettingsPage() {
       <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-stitch space-y-4">
         <h3 className="text-xs font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-sky-600" />
-          <span>1. Identitas Resmi Farmasi & SIPA</span>
+          <span>1. Identitas Resmi Farmasi & Izin Praktik (SIPA/STR/Asnakes)</span>
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

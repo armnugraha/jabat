@@ -2,7 +2,7 @@ import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Order, StoreSettings } from '@/lib/types';
-import { getOrderStatusBadge, getPaymentStatusBadge } from '@/lib/utils';
+import { getOrderStatusBadge, getPaymentStatusBadge, parsePharmacistLicense } from '@/lib/utils';
 
 export function formatDate(isoStr?: string): string {
   if (!isoStr) return '-';
@@ -230,7 +230,11 @@ export function exportSingleInvoiceToExcel(order: Order, storeSettings?: StoreSe
   if (storeSettings?.branch_name) rows.push([`Cabang: ${storeSettings.branch_name}`]);
   if (storeSettings?.address) rows.push([storeSettings.address]);
   if (storeSettings?.phone) rows.push([`Telp: ${storeSettings.phone}`]);
-  if (storeSettings?.pharmacist_name) rows.push([`Apoteker PJ: ${storeSettings.pharmacist_name} (SIPA: ${storeSettings.pharmacist_sipa || '-'})`]);
+  if (storeSettings?.pharmacist_name) {
+    const lic = parsePharmacistLicense(storeSettings?.pharmacist_sipa);
+    const licText = lic.hasLicense ? ` (${lic.displayText})` : '';
+    rows.push([`Apoteker PJ: ${storeSettings.pharmacist_name}${licText}`]);
+  }
   rows.push([]);
   rows.push(['FAKTUR / INVOICE PENJUALAN']);
   rows.push(['No. Invoice', order.order_number]);
@@ -433,7 +437,7 @@ export function exportSingleInvoiceToPDF(order: Order, storeSettings?: StoreSett
   const branch = storeSettings?.branch_name || 'Bandung';
   const phone = storeSettings?.phone || '0812-3456-7890';
   const pharmacist = storeSettings?.pharmacist_name || 'apt. Siti Rahma, S.Farm.';
-  const sipa = storeSettings?.pharmacist_sipa || '19870412/SIPA-31.74/2021/2048';
+  const sipa = storeSettings?.pharmacist_sipa || '';
 
   // 1. Header Pharmacy
   doc.setFontSize(18);
@@ -445,8 +449,9 @@ export function exportSingleInvoiceToPDF(order: Order, storeSettings?: StoreSett
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(100, 116, 139);
   doc.text(`Cabang: ${branch} • Layanan Farmasi & Tebus Resep Digital`, 40, 65);
-  doc.text(`${storeSettings?.address || 'Jl. Raya Apotek No. 42'} • Kontak: ${phone}`, 40, 78);
-  doc.text(`Apoteker PJ: ${pharmacist} | SIPA: ${sipa}`, 40, 91);
+  const lic = parsePharmacistLicense(sipa);
+  const licHeader = lic.hasLicense ? ` | ${lic.displayText}` : '';
+  doc.text(`Apoteker PJ: ${pharmacist}${licHeader}`, 40, 91);
 
   // Status Stamp in Header Right
   const isCancelled = order.status === 'cancelled' || order.payment_status === 'cancelled';
@@ -626,8 +631,8 @@ export function exportSingleInvoiceToPDF(order: Order, storeSettings?: StoreSett
   doc.text(`( ${pharmacist} )`, 460, sigY + 50, { align: 'center' });
   doc.setFontSize(7.5);
   doc.setFont('helvetica', 'normal');
-  doc.setTextColor(100, 116, 139);
-  doc.text(`SIPA: ${sipa}`, 460, sigY + 60, { align: 'center' });
+  const licSig = parsePharmacistLicense(sipa);
+  doc.text(licSig.hasLicense ? licSig.displayText : 'Apoteker Penanggung Jawab', 460, sigY + 60, { align: 'center' });
 
   doc.save(`Invoice_${order.order_number}.pdf`);
 }

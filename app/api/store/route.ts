@@ -75,12 +75,20 @@ export async function GET() {
         null;
 
       if (data && !error) {
+        // If an active pharmacist exists, their profile is the single source of truth
+        // If no pharmacist is registered, return '-' and empty string (do not fall back to stale/mock data)
+        const determinedName = activePharmacist
+          ? activePharmacist.full_name
+          : '-';
+        const determinedSipa = activePharmacist
+          ? (activePharmacist.sipa_number || '')
+          : '';
+
         const mergedData = {
           ...data,
-          // Sync with profile single source of truth
-          pharmacist_name: activePharmacist?.full_name || data.pharmacist_name || mockStoreSettings.pharmacist_name,
-          pharmacist_sipa: activePharmacist?.sipa_number || data.pharmacist_sipa || mockStoreSettings.pharmacist_sipa,
-          pharmacist_id: activePharmacist?.id || (data as any)?.pharmacist_id || null,
+          pharmacist_name: determinedName,
+          pharmacist_sipa: determinedSipa,
+          pharmacist_id: activePharmacist?.id || null,
         };
 
         return NextResponse.json(
