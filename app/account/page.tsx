@@ -151,9 +151,12 @@ function AccountContent() {
       return;
     }
 
-    if (!regEmail.trim()) {
-      setAuthError('Alamat email wajib diisi.');
-      return;
+    if (regEmail.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(regEmail.trim())) {
+        setAuthError('Format email tidak valid. Masukkan format email yang benar atau kosongkan.');
+        return;
+      }
     }
 
     if (!password || password.length < 6) {
@@ -163,7 +166,12 @@ function AccountContent() {
 
     setIsSubmitting(true);
 
-    const res = await register(fullName.trim(), cleanPhone, regEmail.trim().toLowerCase(), password);
+    const res = await register(
+      fullName.trim(),
+      cleanPhone,
+      regEmail.trim() ? regEmail.trim().toLowerCase() : undefined,
+      password
+    );
     setIsSubmitting(false);
 
     if (!res.success) {
@@ -517,18 +525,17 @@ function AccountContent() {
 
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      Alamat Email *
+                      Alamat Email <span className="text-slate-400 font-normal">(Opsional)</span>
                     </label>
                     <div className="relative">
                       <input
                         type="email"
-                        required
                         value={regEmail}
                         onChange={(e) => setRegEmail(e.target.value.toLowerCase())}
                         autoCapitalize="none"
                         autoCorrect="off"
                         spellCheck={false}
-                        placeholder="email@anda.com"
+                        placeholder="email@anda.com (opsional)"
                         className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 pl-10 pr-3 text-xs lowercase focus:outline-none focus:ring-2 focus:ring-sky-500/20 focus:border-sky-500"
                       />
                       <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -626,7 +633,7 @@ function AccountContent() {
                     <p className="text-xs text-slate-600 font-medium mt-0.5 truncate">
                       {user.phone || 'Nomor WhatsApp belum diatur'}
                     </p>
-                    {user.email && (
+                    {user.email && !user.email.endsWith('@phone.jabat.id') && (
                       <p className="text-[11px] text-slate-400 font-mono truncate">
                         {user.email}
                       </p>
@@ -1130,7 +1137,7 @@ function AccountContent() {
                 <div className="relative">
                   <input
                     type="email"
-                    value={user?.email || ''}
+                    value={user?.email && !user.email.endsWith('@phone.jabat.id') ? user.email : 'Belum diatur'}
                     disabled
                     className="w-full bg-slate-100 border border-slate-200 rounded-xl py-2.5 pl-10 pr-3 text-xs text-slate-500 cursor-not-allowed font-mono"
                   />

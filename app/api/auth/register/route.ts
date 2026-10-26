@@ -14,17 +14,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { fullName, phone, email, password } = body;
 
-    if (!fullName?.trim() || !phone?.trim() || !email?.trim()) {
+    if (!fullName?.trim() || !phone?.trim()) {
       return NextResponse.json(
-        { success: false, error: 'Nama lengkap, nomor telepon/WhatsApp, dan email wajib diisi.' },
+        { success: false, error: 'Nama lengkap dan nomor telepon/WhatsApp wajib diisi.' },
         { status: 400 }
       );
     }
 
     const cleanName = fullName.trim();
     const cleanPhone = phone.trim();
-    const cleanEmail = email.trim().toLowerCase();
+    const hasEmail = Boolean(email && typeof email === 'string' && email.trim());
+    const cleanEmail = hasEmail ? email.trim().toLowerCase() : '';
     const cleanPassword = password?.trim() || 'Apotek123!';
+
+    if (hasEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+      return NextResponse.json(
+        { success: false, error: 'Format email tidak valid. Masukkan format email yang benar atau kosongkan.' },
+        { status: 400 }
+      );
+    }
 
     const phoneDigits = cleanPhone.replace(/\D/g, '');
     if (phoneDigits.length < 8) {
@@ -33,6 +41,8 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+
+    const authEmail = hasEmail ? cleanEmail : `${phoneDigits}@phone.jabat.id`;
 
     let userId = `user-${Date.now()}`;
     let registeredUser = null;
@@ -102,7 +112,7 @@ export async function POST(request: Request) {
       }
 
       const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
+        email: authEmail,
         password: cleanPassword,
         options: {
           data: {
@@ -110,6 +120,7 @@ export async function POST(request: Request) {
             full_name: cleanName,
             phone: cleanPhone,
             role: 'customer',
+            ...(hasEmail ? { email: cleanEmail } : {}),
           },
         },
       });
@@ -120,7 +131,12 @@ export async function POST(request: Request) {
           error.message.toLowerCase().includes('already exists')
         ) {
           return NextResponse.json(
-            { success: false, error: 'Email ini sudah terdaftar. Silakan langsung masuk ke akun Anda.' },
+            {
+              success: false,
+              error: hasEmail
+                ? 'Email ini sudah terdaftar. Silakan langsung masuk ke akun Anda.'
+                : 'Nomor WhatsApp / telepon ini sudah terdaftar. Silakan langsung masuk ke akun Anda.',
+            },
             { status: 409 }
           );
         }
@@ -191,7 +207,7 @@ export async function POST(request: Request) {
       role: 'customer',
       full_name: cleanName,
       phone: cleanPhone,
-      email: cleanEmail,
+      email: hasEmail ? cleanEmail : undefined,
       avatar_url: null,
       created_at: new Date().toISOString(),
     };

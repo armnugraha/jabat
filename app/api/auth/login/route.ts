@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase/client';
+import { getSupabaseAdminClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +60,23 @@ export async function POST(request: Request) {
         if (phoneDigits === '081234567890' || cleanIdentifier === '081234567890') emailToAuth = 'pasien@jabat.id';
         else if (phoneDigits === '081298765432' || cleanIdentifier === '081298765432') emailToAuth = 'apoteker@jabat.id';
         else if (phoneDigits === '081122334455' || cleanIdentifier === '081122334455') emailToAuth = 'admin@jabat.id';
-        else emailToAuth = `${phoneDigits || cleanIdentifier}@phone.jabat.id`;
+        else {
+          try {
+            const adminClient = await getSupabaseAdminClient();
+            if (adminClient?.auth?.admin && profileWithPhone.id) {
+              const { data: authUserData } = await adminClient.auth.admin.getUserById(profileWithPhone.id);
+              if (authUserData?.user?.email) {
+                emailToAuth = authUserData.user.email;
+              } else {
+                emailToAuth = `${phoneDigits || cleanIdentifier}@phone.jabat.id`;
+              }
+            } else {
+              emailToAuth = `${phoneDigits || cleanIdentifier}@phone.jabat.id`;
+            }
+          } catch {
+            emailToAuth = `${phoneDigits || cleanIdentifier}@phone.jabat.id`;
+          }
+        }
       }
     }
 
@@ -173,12 +190,18 @@ export async function POST(request: Request) {
       }
     }
 
+    const userEmail = authData.user.email && !authData.user.email.endsWith('@phone.jabat.id')
+      ? authData.user.email
+      : cleanIdentifier.includes('@')
+      ? cleanIdentifier
+      : undefined;
+
     const authenticatedUser = {
       id: authData.user.id,
       role: determinedRole,
       full_name: determinedName,
       phone: determinedPhone,
-      email: authData.user.email || cleanIdentifier,
+      email: userEmail,
       avatar_url: determinedAvatar,
       sipa_number: determinedSipa,
       created_at: profile?.created_at || authData.user.created_at,

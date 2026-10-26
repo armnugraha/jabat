@@ -53,10 +53,10 @@ export const AuthRequiredCard: React.FC<AuthRequiredCardProps> = ({
     setIsSubmitting(true);
 
     const cleanInput = identifier.trim().toLowerCase();
-    const email = cleanInput.includes('@')
-      ? cleanInput
-      : `${cleanInput.replace(/\D/g, '') || cleanInput}@pasien.apoteksehatmandiri.com`;
-    const res = await register(fullName, cleanInput, email, password);
+    const isEmail = cleanInput.includes('@');
+    const email = isEmail ? cleanInput : undefined;
+    const phone = isEmail ? '' : cleanInput;
+    const res = await register(fullName, phone || cleanInput, email, password);
     setIsSubmitting(false);
 
     if (!res.success) {

@@ -9,7 +9,7 @@ interface AuthContextType {
   token: string | null;
   role: UserRole;
   login: (emailOrPhone: string, password?: string, selectedRole?: UserRole) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
-  register: (fullName: string, phone: string, email: string, password?: string) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
+  register: (fullName: string, phone: string, email?: string, password?: string) => Promise<{ success: boolean; error?: string; user?: UserProfile }>;
   updateUser: (updatedProfile: Partial<UserProfile>) => void;
   logout: () => Promise<void>;
   authFetch: (url: string, options?: RequestInit) => Promise<Response>;
@@ -263,13 +263,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const register = async (
     fullName: string,
     phone: string,
-    email: string,
+    email?: string,
     password?: string
   ) => {
     setIsLoading(true);
     try {
-      if (!fullName.trim() || !phone.trim() || !email.trim()) {
-        return { success: false, error: 'Nama lengkap, nomor telepon, dan email wajib diisi.' };
+      if (!fullName.trim() || !phone.trim()) {
+        return { success: false, error: 'Nama lengkap dan nomor telepon/WhatsApp wajib diisi.' };
       }
 
       const res = await fetch('/api/auth/register', {
@@ -278,7 +278,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         body: JSON.stringify({
           fullName: fullName.trim(),
           phone: phone.trim(),
-          email: email.trim().toLowerCase(),
+          email: email?.trim().toLowerCase() || '',
           password: password || 'Apotek123!',
         }),
       });
