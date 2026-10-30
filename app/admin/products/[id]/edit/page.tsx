@@ -23,7 +23,9 @@ import { Category, Product, ProductVariant } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 
 const PACKAGING_NAME_PRESETS = [
+  'Tablet',
   'Strip',
+  'Box',
   'Box / Kotak',
   'Botol / Sirup',
   'Tablet / Kaplet',
@@ -54,7 +56,9 @@ export default function EditProductPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
   const [categories, setCategories] = useState<Category[]>(mockCategories);
 
@@ -149,10 +153,13 @@ export default function EditProductPage() {
               },
             ]);
           }
+        } else {
+          setNotFound(true);
         }
       })
       .catch((err) => {
         console.error('Failed fetching edit product data:', err);
+        setNotFound(true);
       })
       .finally(() => {
         setIsLoading(false);
@@ -285,11 +292,57 @@ export default function EditProductPage() {
     }
   };
 
+  const handleDeleteProduct = async () => {
+    if (!window.confirm(`Yakin ingin menghapus produk obat "${name || 'ini'}" dari katalog Apotek Jabat? Tindakan ini tidak dapat dibatalkan.`)) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: 'DELETE',
+      });
+      const json = await res.json();
+      if (json.success) {
+        alert('Produk obat berhasil dihapus dari sistem!');
+        router.push('/admin/products');
+      } else {
+        alert(json.error || 'Gagal menghapus produk obat.');
+      }
+    } catch (err: any) {
+      console.error('Delete product error:', err);
+      alert('Gagal menghubungi server untuk menghapus produk obat.');
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[50vh] gap-2">
         <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
         <span className="text-xs text-slate-500 font-medium">Memuat data produk...</span>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="max-w-md mx-auto text-center py-16 px-4 space-y-4">
+        <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto border border-rose-200">
+          <ShieldAlert className="w-7 h-7" />
+        </div>
+        <h2 className="text-base font-bold text-slate-900">Produk Obat Tidak Ditemukan</h2>
+        <p className="text-xs text-slate-500">
+          Produk dengan ID <code className="text-rose-600 font-mono font-semibold">{id}</code> tidak ditemukan atau telah dihapus dari sistem.
+        </p>
+        <Link
+          href="/admin/products"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition shadow-sm"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Kembali ke Daftar Produk</span>
+        </Link>
       </div>
     );
   }
@@ -315,14 +368,27 @@ export default function EditProductPage() {
           </div>
         </div>
 
-        <button
-          type="submit"
-          disabled={isSaving}
-          className="px-5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-sky-600/25 transition active:scale-95"
-        >
-          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-          <span>{isSaving ? 'Menyimpan Perubahan...' : 'Simpan Perubahan'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={isSaving || isDeleting}
+            onClick={handleDeleteProduct}
+            className="px-4 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 font-bold text-xs flex items-center gap-2 transition active:scale-95 disabled:opacity-50"
+            title="Hapus Produk Obat"
+          >
+            {isDeleting ? <Loader2 className="w-4 h-4 animate-spin text-rose-600" /> : <Trash2 className="w-4 h-4 text-rose-600" />}
+            <span>Hapus Obat</span>
+          </button>
+
+          <button
+            type="submit"
+            disabled={isSaving || isDeleting}
+            className="px-5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-sky-600/25 transition active:scale-95"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{isSaving ? 'Menyimpan Perubahan...' : 'Simpan Perubahan'}</span>
+          </button>
+        </div>
       </div>
 
       {/* Section 1: Informasi Dasar & Gambar */}
@@ -444,13 +510,26 @@ export default function EditProductPage() {
 
           <div className="sm:col-span-2">
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Deskripsi Singkat & Khasiat
+              Deskripsi Produk
             </label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Jelaskan manfaat obat dan kegunaannya..."
+              placeholder="Jelaskan deskripsi produk (mendukung enter / baris baru)..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Indikasi Umum & Manfaat
+            </label>
+            <textarea
+              rows={2}
+              value={indications}
+              onChange={(e) => setIndications(e.target.value)}
+              placeholder="Indikasi medis atau manfaat klinis obat..."
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
             />
           </div>
@@ -459,12 +538,12 @@ export default function EditProductPage() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Kandungan / Komposisi Zat Aktif
             </label>
-            <input
-              type="text"
+            <textarea
+              rows={2}
               value={composition}
               onChange={(e) => setComposition(e.target.value)}
               placeholder="Tiap tablet mengandung..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3 text-xs focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2 px-3 text-xs focus:outline-none"
             />
           </div>
 
@@ -472,12 +551,25 @@ export default function EditProductPage() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Dosis & Aturan Minum
             </label>
-            <input
-              type="text"
+            <textarea
+              rows={2}
               value={dosage}
               onChange={(e) => setDosage(e.target.value)}
               placeholder="Dewasa: 1 tablet 3x sehari..."
-              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3 text-xs focus:outline-none"
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2 px-3 text-xs focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Peringatan & Perhatian (Kontraindikasi)
+            </label>
+            <textarea
+              rows={2}
+              value={precautions}
+              onChange={(e) => setPrecautions(e.target.value)}
+              placeholder="Hati-hati penggunaan pada pasien dengan..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
             />
           </div>
         </div>
@@ -657,7 +749,7 @@ export default function EditProductPage() {
                   <input
                     type="number"
                     min="0"
-                    step="500"
+                    step="any"
                     value={v.price}
                     onChange={(e) =>
                       updateVariant(index, 'price', Number(e.target.value))
@@ -673,7 +765,7 @@ export default function EditProductPage() {
                   <input
                     type="number"
                     min="0"
-                    step="500"
+                    step="any"
                     value={v.strike_price || ''}
                     onChange={(e) =>
                       updateVariant(index, 'strike_price', Number(e.target.value))
@@ -700,6 +792,36 @@ export default function EditProductPage() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Bottom Action Bar */}
+      <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+        <button
+          type="button"
+          disabled={isSaving || isDeleting}
+          onClick={handleDeleteProduct}
+          className="px-4 py-2.5 rounded-2xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80 font-bold text-xs flex items-center gap-2 transition active:scale-95 disabled:opacity-50"
+        >
+          {isDeleting ? <Loader2 className="w-4 h-4 animate-spin text-rose-600" /> : <Trash2 className="w-4 h-4 text-rose-600" />}
+          <span>Hapus Obat</span>
+        </button>
+
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/products"
+            className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+          >
+            Batal
+          </Link>
+          <button
+            type="submit"
+            disabled={isSaving || isDeleting}
+            className="px-5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-sky-600/25 transition active:scale-95"
+          >
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+            <span>{isSaving ? 'Menyimpan Perubahan...' : 'Simpan Perubahan'}</span>
+          </button>
         </div>
       </div>
     </form>

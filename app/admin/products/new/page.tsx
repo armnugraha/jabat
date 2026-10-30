@@ -393,13 +393,26 @@ export default function NewProductPage() {
 
           <div className="sm:col-span-2">
             <label className="block text-xs font-bold text-slate-700 mb-1">
-              Deskripsi Singkat & Khasiat
+              Deskripsi Produk
             </label>
             <textarea
               rows={3}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Jelaskan manfaat obat dan kegunaannya..."
+              placeholder="Jelaskan deskripsi produk (mendukung enter / baris baru)..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Indikasi Umum & Manfaat
+            </label>
+            <textarea
+              rows={2}
+              value={indications}
+              onChange={(e) => setIndications(e.target.value)}
+              placeholder="Indikasi medis atau manfaat klinis obat..."
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
             />
           </div>
@@ -408,8 +421,8 @@ export default function NewProductPage() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Kandungan / Komposisi Zat Aktif
             </label>
-            <input
-              type="text"
+            <textarea
+              rows={2}
               value={composition}
               onChange={(e) => setComposition(e.target.value)}
               placeholder="Tiap tablet mengandung..."
@@ -421,12 +434,25 @@ export default function NewProductPage() {
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Dosis & Aturan Minum
             </label>
-            <input
-              type="text"
+            <textarea
+              rows={2}
               value={dosage}
               onChange={(e) => setDosage(e.target.value)}
               placeholder="Dewasa: 1 tablet 3x sehari..."
               className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-2 px-3 text-xs focus:outline-none"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Peringatan & Perhatian (Kontraindikasi)
+            </label>
+            <textarea
+              rows={2}
+              value={precautions}
+              onChange={(e) => setPrecautions(e.target.value)}
+              placeholder="Hati-hati penggunaan pada pasien dengan..."
+              className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs font-medium text-slate-900 focus:outline-none"
             />
           </div>
         </div>
@@ -607,7 +633,7 @@ export default function NewProductPage() {
                   <input
                     type="number"
                     min="0"
-                    step="500"
+                    step="any"
                     value={v.price}
                     onChange={(e) =>
                       updateVariant(index, 'price', Number(e.target.value))
@@ -623,7 +649,7 @@ export default function NewProductPage() {
                   <input
                     type="number"
                     min="0"
-                    step="500"
+                    step="any"
                     value={v.strike_price || ''}
                     onChange={(e) =>
                       updateVariant(index, 'strike_price', Number(e.target.value))

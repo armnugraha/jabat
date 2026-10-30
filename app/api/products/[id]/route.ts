@@ -3,10 +3,7 @@ import { mockProducts } from '@/lib/data/mock-data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
-
-function isValidUUID(str: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
-}
+import { isValidUUID } from '@/lib/utils';
 
 export async function GET(
   request: NextRequest,
@@ -139,12 +136,16 @@ export async function PUT(
         );
       }
 
-      // 2. Update / replace variants
+      // 2. Update / upsert variants safely
       if (variants && Array.isArray(variants)) {
-        // Delete old variants
-        await supabase.from('product_variants').delete().eq('product_id', id);
+        // Fetch existing variants from DB to detect deletions
+        const { data: currentVariants } = await supabase
+          .from('product_variants')
+          .select('id')
+          .eq('product_id', id);
 
-        // Insert new variants
+        const currentVariantIds = (currentVariants || []).map((v: any) => v.id);
+
         const formattedVariants = variants.map((v: any) => ({
           id: v.id && isValidUUID(v.id) ? v.id : crypto.randomUUID(),
           product_id: id,
@@ -153,16 +154,32 @@ export async function PUT(
           quantity_per_package: Number(v.quantity_per_package) || 1,
           price: Number(v.price) || 0,
           strike_price: v.strike_price ? Number(v.strike_price) : null,
-          discount_percentage: v.strike_price && v.price
-            ? Math.round(((v.strike_price - v.price) / v.strike_price) * 100)
-            : 0,
+          discount_percentage:
+            v.strike_price && v.price
+              ? Math.round(((v.strike_price - v.price) / v.strike_price) * 100)
+              : 0,
           stock: Number(v.stock) || 0,
           is_active: v.is_active !== false,
+          updated_at: new Date().toISOString(),
         }));
 
-        const { error: varErr } = await supabase.from('product_variants').insert(formattedVariants);
+        const submittedIds = new Set(formattedVariants.map((v: any) => v.id));
+        const removedVariantIds = currentVariantIds.filter((cid: string) => !submittedIds.has(cid));
+
+        if (removedVariantIds.length > 0) {
+          try {
+            await supabase.from('cart_items').delete().in('variant_id', removedVariantIds);
+            await supabase.from('order_items').update({ variant_id: null }).in('variant_id', removedVariantIds);
+            await supabase.from('product_variants').delete().in('id', removedVariantIds);
+          } catch (delErr) {
+            console.warn('Could not delete removed variants, deactivating instead:', delErr);
+            await supabase.from('product_variants').update({ is_active: false }).in('id', removedVariantIds);
+          }
+        }
+
+        const { error: varErr } = await supabase.from('product_variants').upsert(formattedVariants);
         if (varErr) {
-          console.error('Supabase variants update error:', varErr);
+          console.error('Supabase variants upsert error:', varErr);
           return NextResponse.json(
             { success: false, error: varErr.message || 'Gagal memperbarui varian produk di Supabase' },
             { status: 500 }
@@ -367,7 +384,32 @@ export async function DELETE(
 
     if (isSupabaseConfigured() && isValidUUID(id)) {
       const supabase = await getSupabaseAdminClient();
+
+      // 1. Detach order_items referencing this product
+      await supabase.from('order_items').update({ product_id: null }).eq('product_id', id);
+
+      // 2. Detach or delete variants references
+      const { data: existingVariants } = await supabase
+        .from('product_variants')
+        .select('id')
+        .eq('product_id', id);
+
+      if (existingVariants && existingVariants.length > 0) {
+        const varIds = existingVariants.map((v: any) => v.id);
+        await supabase.from('order_items').update({ variant_id: null }).in('variant_id', varIds);
+        await supabase.from('cart_items').delete().in('variant_id', varIds);
+      }
+
+      // 3. Clean up cart items for this product
+      await supabase.from('cart_items').delete().eq('product_id', id);
+
+      // 4. Detach recommended product in chat auto replies
+      await supabase.from('chat_auto_replies').update({ recommended_product_id: null }).eq('recommended_product_id', id);
+
+      // 5. Delete product variants
       await supabase.from('product_variants').delete().eq('product_id', id);
+
+      // 6. Delete product from database
       const { error } = await supabase.from('products').delete().eq('id', id);
       if (error) {
         return NextResponse.json(
@@ -375,10 +417,17 @@ export async function DELETE(
           { status: 500 }
         );
       }
+
       return NextResponse.json({
         success: true,
-        message: 'Produk berhasil dihapus dari Supabase',
+        message: 'Produk berhasil dihapus dari database',
       });
+    }
+
+    // Fallback if mock
+    const idx = mockProducts.findIndex((p) => p.id === id || p.slug === id);
+    if (idx !== -1) {
+      mockProducts.splice(idx, 1);
     }
 
     return NextResponse.json({
@@ -392,5 +441,3 @@ export async function DELETE(
     );
   }
 }
-
-

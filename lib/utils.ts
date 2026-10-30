@@ -207,3 +207,11 @@ export function formatPharmacistLicense(type: LicenseType, id: string): string {
   return `${type}: ${cleanId}`;
 }
 
+export function isValidUUID(val: any): boolean {
+  return (
+    typeof val === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val)
+  );
+}
+
+

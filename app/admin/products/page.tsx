@@ -110,11 +110,16 @@ export default function AdminProductsPage() {
   const deleteProduct = async (id: string) => {
     if (confirm('Yakin ingin menghapus produk obat ini dari sistem?')) {
       try {
-        await fetch(`/api/products/${id}`, { method: 'DELETE' });
-        setProducts((prev) => prev.filter((p) => p.id !== id));
+        const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+        const json = await res.json();
+        if (json.success) {
+          setProducts((prev) => prev.filter((p) => p.id !== id));
+        } else {
+          alert(json.error || 'Gagal menghapus produk obat');
+        }
       } catch (err) {
         console.error('Failed deleting product:', err);
-        setProducts((prev) => prev.filter((p) => p.id !== id));
+        alert('Gagal menghubungi server untuk menghapus produk obat');
       }
     }
   };

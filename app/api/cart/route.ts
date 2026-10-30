@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
+import { isValidUUID } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -12,13 +13,6 @@ const noCacheHeaders = {
   Pragma: 'no-cache',
   Expires: '0',
 };
-
-function isValidUUID(val: any): boolean {
-  return (
-    typeof val === 'string' &&
-    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val)
-  );
-}
 
 // GET /api/cart?userId=<uuid>
 export async function GET(request: Request) {

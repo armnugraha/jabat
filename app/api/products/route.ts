@@ -3,14 +3,11 @@ import { mockProducts, mockCategories } from '@/lib/data/mock-data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
+import { isValidUUID } from '@/lib/utils';
 
 // In-memory store fallback when Supabase is not connected
 let dynamicProducts: Product[] = [...mockProducts];
 
-// Helper to check if string is valid UUID
-function isValidUUID(str: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(str);
-}
 
 export async function GET(request: NextRequest) {
   try {

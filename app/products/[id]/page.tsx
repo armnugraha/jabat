@@ -664,7 +664,7 @@ export default function ProductDetailPage() {
                 <Thermometer className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <div>
                   <strong className="text-slate-900">Penyimpanan Obat Sesuai Standar:</strong>
-                  <p className="mt-0.5 text-slate-600 leading-relaxed">
+                  <p className="mt-0.5 text-slate-600 leading-relaxed whitespace-pre-wrap break-words">
                     {product.storage_instructions || 'Simpan di tempat kering dan sejuk (di bawah 30°C), terlindung dari sinar matahari langsung.'}
                   </p>
                 </div>
@@ -743,11 +743,23 @@ export default function ProductDetailPage() {
                 {activeTab === 'indikasi' && (
                   <div className="space-y-3">
                     <h4 className="font-bold text-slate-900">Deskripsi & Indikasi Umum</h4>
-                    <p>{product.description}</p>
+                    {product.description && (
+                      <div className="whitespace-pre-wrap break-words leading-relaxed text-slate-700">
+                        {product.description}
+                      </div>
+                    )}
+                    {product.indications && product.indications !== product.description && (
+                      <div className="pt-2 border-t border-slate-100">
+                        <h5 className="font-bold text-slate-900 mb-1">Indikasi Klinis & Manfaat</h5>
+                        <div className="whitespace-pre-wrap break-words leading-relaxed text-slate-700">
+                          {product.indications}
+                        </div>
+                      </div>
+                    )}
                     {product.precautions && (
                       <div className="p-3 rounded-2xl bg-sky-50 border border-sky-100 flex items-start gap-2 text-sky-900 text-xs">
                         <Info className="w-4 h-4 text-sky-600 shrink-0 mt-0.5" />
-                        <span>{product.precautions}</span>
+                        <span className="whitespace-pre-wrap break-words">{product.precautions}</span>
                       </div>
                     )}
                   </div>
@@ -756,21 +768,27 @@ export default function ProductDetailPage() {
                 {activeTab === 'komposisi' && (
                   <div className="space-y-2">
                     <h4 className="font-bold text-slate-900">Kandungan Zat Aktif</h4>
-                    <p>{product.composition || 'Tiap tablet mengandung Paracetamol 500 mg.'}</p>
+                    <div className="whitespace-pre-wrap break-words leading-relaxed text-slate-700">
+                      {product.composition || 'Tiap tablet mengandung Paracetamol 500 mg.'}
+                    </div>
                   </div>
                 )}
 
                 {activeTab === 'dosis' && (
                   <div className="space-y-2">
                     <h4 className="font-bold text-slate-900">Dosis & Cara Penggunaan</h4>
-                    <p>{product.dosage || 'Dewasa: 1-2 tablet 3-4 kali sehari sesudah makan.'}</p>
+                    <div className="whitespace-pre-wrap break-words leading-relaxed text-slate-700">
+                      {product.dosage || 'Dewasa: 1-2 tablet 3-4 kali sehari sesudah makan.'}
+                    </div>
                   </div>
                 )}
 
                 {activeTab === 'perhatian' && (
                   <div className="space-y-2">
                     <h4 className="font-bold text-slate-900">Peringatan & Kontraindikasi</h4>
-                    <p>{product.precautions || 'Hati-hati penggunaan pada pasien dengan gangguan ginjal atau hati.'}</p>
+                    <div className="whitespace-pre-wrap break-words leading-relaxed text-slate-700">
+                      {product.precautions || 'Hati-hati penggunaan pada pasien dengan gangguan ginjal atau hati.'}
+                    </div>
                   </div>
                 )}
               </div>
