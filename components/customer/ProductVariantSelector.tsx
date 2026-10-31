@@ -70,7 +70,7 @@ export const ProductVariantSelector: React.FC<ProductVariantSelectorProps> = ({
                 <span className="text-base font-extrabold text-sky-700">
                   {formatRupiah(selectedVariant.price)}
                 </span>
-                {selectedVariant.strike_price && (
+                {typeof selectedVariant.strike_price === 'number' && selectedVariant.strike_price > selectedVariant.price && (
                   <span className="text-xs text-slate-400 line-through">
                     {formatRupiah(selectedVariant.strike_price)}
                   </span>
@@ -143,7 +143,7 @@ export const ProductVariantSelector: React.FC<ProductVariantSelectorProps> = ({
                     <div className="text-xs font-extrabold text-sky-700">
                       {formatRupiah(v.price)}
                     </div>
-                    {v.strike_price && (
+                    {typeof v.strike_price === 'number' && v.strike_price > v.price && (
                       <div className="text-[10px] text-slate-400 line-through">
                         {formatRupiah(v.strike_price)}
                       </div>

@@ -183,7 +183,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         {/* Price and Action Button */}
         <div className="flex items-end justify-between mt-3 pt-2 border-t border-slate-100/80">
           <div>
-            {defaultVariant.strike_price && (
+            {typeof defaultVariant.strike_price === 'number' && defaultVariant.strike_price > defaultVariant.price && (
               <div className="text-[10px] text-slate-400 line-through">
                 {formatRupiah(defaultVariant.strike_price)}
               </div>

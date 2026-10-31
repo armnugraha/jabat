@@ -378,7 +378,7 @@ export default function ProductDetailPage() {
                     />
                     {product.requires_prescription ? 'Wajib Resep' : 'Obat Bebas'}
                   </span>
-                  {selectedVariant.discount_percentage && (
+                  {Boolean(selectedVariant.discount_percentage && selectedVariant.discount_percentage > 0) && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-200">
                       Diskon -{selectedVariant.discount_percentage}%
                     </span>
@@ -554,7 +554,7 @@ export default function ProductDetailPage() {
                     <span className="text-xl sm:text-2xl font-extrabold text-sky-700">
                       {formatRupiah(selectedVariant.price)}
                     </span>
-                    {selectedVariant.strike_price && (
+                    {typeof selectedVariant.strike_price === 'number' && selectedVariant.strike_price > selectedVariant.price && (
                       <span className="text-xs text-slate-400 line-through">
                         {formatRupiah(selectedVariant.strike_price)}
                       </span>
