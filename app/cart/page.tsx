@@ -436,9 +436,9 @@ export default function CartPage() {
 
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 pb-32 lg:pb-16">
+    <div className="flex flex-col min-h-screen lg:h-screen lg:overflow-hidden bg-slate-50 pb-32 lg:pb-0">
       {/* Top Header */}
-      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 py-3 shadow-xs">
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 py-3 shadow-xs shrink-0">
         <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
@@ -466,7 +466,7 @@ export default function CartPage() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 space-y-4 pt-4">
+      <main className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 pt-4 pb-4 lg:flex-1 lg:min-h-0 lg:overflow-hidden">
         {!isLoaded ? (
           <div className="bg-white rounded-3xl border border-slate-200 p-12 text-center my-6 shadow-stitch flex flex-col items-center justify-center space-y-3">
             <Loader2 className="w-8 h-8 animate-spin text-sky-600" />
@@ -474,12 +474,12 @@ export default function CartPage() {
             <p className="text-[11px] text-slate-400">Sinkronisasi data keranjang farmasi...</p>
           </div>
         ) : items.length > 0 ? (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start lg:h-full lg:items-stretch">
             
             {/* ========================================================================= */}
             {/* GRID 1 (LEFT / LEBAR): List Produk Keranjang & Resep Dokter               */}
             {/* ========================================================================= */}
-            <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+            <div className="lg:col-span-7 xl:col-span-8 space-y-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2 lg:pb-16">
               {/* Select All Row */}
               <div className="flex items-center justify-between bg-white rounded-2xl border border-slate-200/80 p-3.5 shadow-stitch text-xs">
                 <button
@@ -853,7 +853,7 @@ export default function CartPage() {
             {/* ========================================================================= */}
             {/* GRID 2 (RIGHT): Card Sisanya Semua (Pengiriman, Alamat, Promo, Bayar)     */}
             {/* ========================================================================= */}
-            <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:sticky lg:top-20">
+            <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:h-full lg:min-h-0 lg:overflow-y-auto lg:overscroll-y-contain lg:pr-2 lg:pb-16">
               {/* Alamat Pengiriman Section */}
               <div className="bg-white rounded-3xl border border-slate-200/80 p-4 shadow-stitch space-y-3">
                 <div className="flex items-center justify-between">
