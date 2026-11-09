@@ -81,6 +81,7 @@ export interface Product {
   image_url: string;
   images?: string[];
   variants: ProductVariant[];
+  companion_product_ids?: string[];
   created_at?: string;
 }
 

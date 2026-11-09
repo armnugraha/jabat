@@ -17,8 +17,10 @@ import {
   Upload,
   X,
   FileImage,
+  Search,
+  Sparkles,
 } from 'lucide-react';
-import { Category, ProductVariant } from '@/lib/types';
+import { Category, Product, ProductVariant } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 
 const PACKAGING_NAME_PRESETS = [
@@ -52,6 +54,7 @@ export default function NewProductPage() {
 
   // Categories state
   const [categories, setCategories] = useState<Category[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
@@ -75,7 +78,12 @@ export default function NewProductPage() {
     'Simpan pada suhu ruangan (<30°C), tempat sejuk dan kering, terlindung dari paparan cahaya matahari langsung.'
   );
 
-  // Fetch categories from API
+  // Companion products (Sering Dibeli Bersamaan)
+  const [companionIds, setCompanionIds] = useState<string[]>([]);
+  const [isManualCompanion, setIsManualCompanion] = useState(false);
+  const [companionSearchQuery, setCompanionSearchQuery] = useState('');
+
+  // Fetch categories & available products from API
   useEffect(() => {
     fetch('/api/categories')
       .then((res) => res.json())
@@ -86,6 +94,15 @@ export default function NewProductPage() {
         }
       })
       .catch((err) => console.error('Failed fetching categories:', err));
+
+    fetch('/api/products?all=true')
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setAvailableProducts(json.data);
+        }
+      })
+      .catch((err) => console.error('Failed fetching products:', err));
   }, []);
 
   // Variants / Packaging Builder
@@ -219,6 +236,7 @@ export default function NewProductPage() {
         precautions: precautions.trim(),
         storage_instructions: storageInstructions.trim(),
         variants: formattedVariants,
+        companion_product_ids: isManualCompanion ? companionIds : [],
       };
 
       const res = await fetch('/api/products', {
@@ -241,6 +259,22 @@ export default function NewProductPage() {
       setIsSaving(false);
     }
   };
+
+  const toggleCompanion = (prodId: string) => {
+    setCompanionIds((prev) =>
+      prev.includes(prodId) ? prev.filter((i) => i !== prodId) : [...prev, prodId]
+    );
+  };
+
+  const filteredCandidates = availableProducts.filter((p) => {
+    if (!companionSearchQuery.trim()) return true;
+    const q = companionSearchQuery.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(q) ||
+      (p.category?.name && p.category.name.toLowerCase().includes(q)) ||
+      (p.manufacturer && p.manufacturer.toLowerCase().includes(q))
+    );
+  });
 
   return (
     <form onSubmit={handleSave} className="space-y-6 max-w-4xl mx-auto pb-16">
@@ -676,6 +710,235 @@ export default function NewProductPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Section 4: Rekomendasi Sering Dibeli Bersamaan */}
+      <div className="bg-white rounded-3xl border border-slate-200/80 p-5 shadow-stitch space-y-4">
+        <div className="pb-2 border-b border-slate-100">
+          <h3 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-amber-500" />
+            <span>4. Pengaturan Rekomendasi &quot;Sering Dibeli Bersamaan&quot;</span>
+          </h3>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            Tentukan produk pelengkap yang direkomendasikan saat customer melihat halaman obat ini untuk meningkatkan cross-selling apotek.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div
+            onClick={() => setIsManualCompanion(false)}
+            className={`p-3.5 rounded-2xl border cursor-pointer transition flex items-start gap-3 ${
+              !isManualCompanion
+                ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-500/10'
+                : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+            }`}
+          >
+            <input
+              type="radio"
+              name="companionMode"
+              checked={!isManualCompanion}
+              onChange={() => setIsManualCompanion(false)}
+              className="mt-0.5 text-sky-600 focus:ring-sky-500"
+            />
+            <div>
+              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <span>Otomatis Cerdas (Smart Apotek)</span>
+                <span className="text-[10px] bg-sky-100 text-sky-700 font-semibold px-2 py-0.5 rounded-full">Default</span>
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                Sistem otomatis merekomendasikan produk relevan (vitamin, alat kesehatan, atau produk satu kategori berstok aktif).
+              </p>
+            </div>
+          </div>
+
+          <div
+            onClick={() => setIsManualCompanion(true)}
+            className={`p-3.5 rounded-2xl border cursor-pointer transition flex items-start gap-3 ${
+              isManualCompanion
+                ? 'border-sky-500 bg-sky-50/50 ring-2 ring-sky-500/10'
+                : 'border-slate-200 bg-slate-50/50 hover:border-slate-300'
+            }`}
+          >
+            <input
+              type="radio"
+              name="companionMode"
+              checked={isManualCompanion}
+              onChange={() => setIsManualCompanion(true)}
+              className="mt-0.5 text-sky-600 focus:ring-sky-500"
+            />
+            <div>
+              <div className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                <span>Atur Manual Produk Pelengkap</span>
+                {companionIds.length > 0 && (
+                  <span className="text-[10px] bg-emerald-100 text-emerald-700 font-bold px-2 py-0.5 rounded-full">
+                    {companionIds.length} Terpilih
+                  </span>
+                )}
+              </div>
+              <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                Pilih manual 1 sampai 4 produk spesifik yang selalu muncul di bagian &quot;Sering Dibeli Bersamaan&quot;.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {isManualCompanion && (
+          <div className="pt-2 space-y-3">
+            {/* Selected Products Badges */}
+            {companionIds.length > 0 ? (
+              <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200/80">
+                <div className="text-[11px] font-bold text-slate-700 mb-2 flex items-center justify-between">
+                  <span>Produk Pelengkap yang Aktif Terpilih ({companionIds.length}):</span>
+                  <button
+                    type="button"
+                    onClick={() => setCompanionIds([])}
+                    className="text-[11px] text-rose-600 hover:underline font-medium"
+                  >
+                    Hapus Semua
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {companionIds.map((cId) => {
+                    const item = availableProducts.find((p) => p.id === cId || p.slug === cId);
+                    if (!item) return null;
+                    const minPrice = item.variants && item.variants.length > 0
+                      ? Math.min(...item.variants.map((v) => v.price))
+                      : 0;
+
+                    return (
+                      <div
+                        key={cId}
+                        className="flex items-center gap-2 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-sm"
+                      >
+                        {item.image_url ? (
+                          <img
+                            src={item.image_url}
+                            alt={item.name}
+                            className="w-6 h-6 rounded-md object-cover border border-slate-100"
+                          />
+                        ) : (
+                          <Package className="w-5 h-5 text-slate-400" />
+                        )}
+                        <span className="text-xs font-semibold text-slate-800 max-w-[160px] truncate">
+                          {item.name}
+                        </span>
+                        <span className="text-[10px] text-emerald-600 font-mono font-bold">
+                          {formatRupiah(minPrice)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => toggleCompanion(cId)}
+                          className="w-4 h-4 rounded-full bg-slate-100 hover:bg-rose-100 hover:text-rose-600 text-slate-400 flex items-center justify-center transition ml-1"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-xs">
+                Belum ada produk pelengkap yang dipilih. Silakan cari dan centang produk di bawah.
+              </div>
+            )}
+
+            {/* Search Input */}
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={companionSearchQuery}
+                onChange={(e) => setCompanionSearchQuery(e.target.value)}
+                placeholder="Cari obat / produk pelengkap berdasarkan nama atau kategori..."
+                className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:bg-white"
+              />
+            </div>
+
+            {/* Product Selection List */}
+            <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 border border-slate-100 rounded-2xl p-2 bg-slate-50/50">
+              {filteredCandidates.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-400">
+                  Tidak ada produk yang cocok dengan pencarian
+                </div>
+              ) : (
+                filteredCandidates.map((prod) => {
+                  const isSelected = companionIds.includes(prod.id);
+                  const minPrice = prod.variants && prod.variants.length > 0
+                    ? Math.min(...prod.variants.map((v) => v.price))
+                    : 0;
+
+                  return (
+                    <label
+                      key={prod.id}
+                      className={`flex items-center justify-between p-2 rounded-xl cursor-pointer transition border ${
+                        isSelected
+                          ? 'bg-sky-50 border-sky-300'
+                          : 'bg-white border-slate-200/70 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleCompanion(prod.id)}
+                          className="w-4 h-4 text-sky-600 rounded focus:ring-sky-500"
+                        />
+                        {prod.image_url ? (
+                          <img
+                            src={prod.image_url}
+                            alt={prod.name}
+                            className="w-8 h-8 rounded-lg object-cover border border-slate-100 shrink-0"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0 text-slate-400">
+                            <Package className="w-4 h-4" />
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-slate-800 truncate">{prod.name}</p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {prod.category?.name || 'Katalog'} • {formatRupiah(minPrice)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 text-right pl-2">
+                        <span
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                            isSelected
+                              ? 'bg-sky-600 text-white'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {isSelected ? 'Dipilih' : 'Pilih'}
+                        </span>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom Action Bar */}
+      <div className="flex items-center justify-end gap-2 pt-4 border-t border-slate-200">
+        <Link
+          href="/admin/products"
+          className="px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+        >
+          Batal
+        </Link>
+        <button
+          type="submit"
+          disabled={isSaving}
+          className="px-5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-bold text-xs flex items-center gap-2 shadow-md shadow-sky-600/25 transition active:scale-95"
+        >
+          {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          <span>{isSaving ? 'Menyimpan...' : 'Simpan Produk'}</span>
+        </button>
       </div>
     </form>
   );

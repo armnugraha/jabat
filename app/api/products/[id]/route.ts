@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
 import { isValidUUID } from '@/lib/utils';
+import { getCompanionProductIds, setCompanionProductIds } from '@/lib/companions';
 
 export async function GET(
   request: NextRequest,
@@ -30,9 +31,13 @@ export async function GET(
       const { data, error } = await queryBuilder.maybeSingle();
 
       if (!error && data) {
+        const companionIds = await getCompanionProductIds(data.id);
         return NextResponse.json({
           success: true,
-          data,
+          data: {
+            ...data,
+            companion_product_ids: companionIds,
+          },
           source: 'supabase',
         });
       }
@@ -73,6 +78,7 @@ export async function PUT(
       storage_instructions,
       image_url,
       variants,
+      companion_product_ids,
     } = body;
 
     if (!name?.trim()) {
@@ -171,6 +177,10 @@ export async function PUT(
             { status: 500 }
           );
         }
+      }
+
+      if (companion_product_ids !== undefined) {
+        await setCompanionProductIds(id, companion_product_ids);
       }
 
       return NextResponse.json({

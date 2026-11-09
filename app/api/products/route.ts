@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
 import { isValidUUID } from '@/lib/utils';
+import { setCompanionProductIds } from '@/lib/companions';
 
 // In-memory store fallback when Supabase is not connected
 let dynamicProducts: Product[] = [];
@@ -277,6 +278,7 @@ export async function POST(request: NextRequest) {
       storage_instructions,
       image_url,
       variants,
+      companion_product_ids,
     } = body;
 
     if (!name?.trim()) {
@@ -404,6 +406,10 @@ export async function POST(request: NextRequest) {
             { success: false, error: varErr.message || 'Gagal menyimpan varian produk ke Supabase' },
             { status: 500 }
           );
+        }
+
+        if (companion_product_ids && Array.isArray(companion_product_ids)) {
+          await setCompanionProductIds(prodData.id, companion_product_ids);
         }
 
         return NextResponse.json({

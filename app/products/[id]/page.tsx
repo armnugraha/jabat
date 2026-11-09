@@ -182,17 +182,29 @@ export default function ProductDetailPage() {
     const sourceList = allProducts;
     const candidates = sourceList.filter((p) => p.id !== product.id && p.slug !== product.slug);
 
+    // 1. Jika produk memiliki pengaturan produk pelengkap manual yang ditentukan oleh admin, prioritaskan produk tersebut!
+    if (Array.isArray(product.companion_product_ids) && product.companion_product_ids.length > 0) {
+      const manualMatches = product.companion_product_ids
+        .map((cId) => candidates.find((p) => p.id === cId || p.slug === cId))
+        .filter(Boolean) as Product[];
+
+      if (manualMatches.length > 0) {
+        return manualMatches;
+      }
+    }
+
+    // 2. Fallback: Rekomendasi otomatis cerdas berdasarkan kategori & komplementer
     const scored = candidates.map((p) => {
       let score = 0;
-      // 1. Same category bonus
+      // Kategori sama
       if (p.category_id && p.category_id === product.category_id) score += 10;
 
-      // 2. Complementary categories (Vitamins/Supplements, First Aid, OTC)
+      // Kategori komplementer (Vitamin/Suplemen, Alkes, Perawatan)
       const catName = (p.category?.name || '').toLowerCase();
       if (catName.includes('vitamin') || catName.includes('suplemen')) score += 8;
       if (catName.includes('alat') || catName.includes('perawatan')) score += 5;
 
-      // 3. Stock availability & popularity bonus
+      // Ketersediaan stok & unggulan
       const hasStock = p.variants?.some((v) => (v.stock || 0) > 0);
       if (hasStock) score += 4;
       if (p.is_featured) score += 2;
