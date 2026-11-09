@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseClientFromRequest, getSupabaseAdminClient, isJwtExpiredError } from '@/lib/supabase/server';
 import { CustomerAddress } from '@/lib/types';
-import { mockCustomerAddress } from '@/lib/data/mock-data';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
@@ -16,7 +15,7 @@ const noCacheHeaders = {
 };
 
 // Local store fallback
-let dynamicAddresses: CustomerAddress[] = [mockCustomerAddress];
+let dynamicAddresses: CustomerAddress[] = [];
 
 export async function GET(request: NextRequest) {
   try {

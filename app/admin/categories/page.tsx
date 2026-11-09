@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { FolderTree, Plus, Trash2, CheckCircle2, Loader2, Pill, Sparkles, Activity, Heart, Stethoscope, Tag, AlertCircle } from 'lucide-react';
-import { mockCategories } from '@/lib/data/mock-data';
 import { Category } from '@/lib/types';
 
 export default function AdminCategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [newCatName, setNewCatName] = useState('');
   const [newCatDesc, setNewCatDesc] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('pill');

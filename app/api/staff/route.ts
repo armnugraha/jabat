@@ -66,42 +66,14 @@ export async function GET(request: Request) {
       }
     }
 
-    // Fallback mock data if database is not configured
-    const fallbackStaff = [
-      {
-        id: 'ef729fc0-54a1-4091-b083-51d1d0ce44b3',
-        role: 'admin',
-        full_name: 'Administrator Apotek Jabat',
-        phone: '081122334455',
-        email: 'admin@jabat.id',
-        avatar_url: null,
-        sipa_number: null,
-        created_at: new Date().toISOString(),
-      },
-      {
-        id: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
-        role: 'pharmacist',
-        full_name: 'apt. Siti Rahma, S.Farm.',
-        phone: '081298765432',
-        email: 'apoteker@jabat.id',
-        avatar_url: null,
-        sipa_number: null,
-        created_at: new Date().toISOString(),
-      },
-    ];
-
-    const filtered = roleFilter && roleFilter !== 'all'
-      ? fallbackStaff.filter((s) => s.role === roleFilter)
-      : fallbackStaff;
-
     return NextResponse.json(
       {
         success: true,
-        data: filtered,
+        data: [],
         stats: {
-          total: fallbackStaff.length,
-          admin: fallbackStaff.filter((s) => s.role === 'admin').length,
-          pharmacist: fallbackStaff.filter((s) => s.role === 'pharmacist').length,
+          total: 0,
+          admin: 0,
+          pharmacist: 0,
         },
       },
       { headers: noCacheHeaders }
@@ -214,25 +186,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fallback response for mock
-    const newStaff = {
-      id: 'staff-' + Date.now(),
-      full_name: full_name.trim(),
-      email: email.trim().toLowerCase(),
-      phone: cleanPhone,
-      role,
-      sipa_number: role === 'pharmacist' ? cleanSipa : null,
-      avatar_url: null,
-      created_at: new Date().toISOString(),
-    };
-
     return NextResponse.json(
-      {
-        success: true,
-        data: newStaff,
-        message: 'Akun staf berhasil dibuat (mode offline).',
-      },
-      { headers: noCacheHeaders }
+      { success: false, error: 'Database tidak terhubung' },
+      { status: 500, headers: noCacheHeaders }
     );
   } catch (err: any) {
     console.error('POST /api/staff error:', err);

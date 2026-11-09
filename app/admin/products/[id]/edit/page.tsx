@@ -18,7 +18,6 @@ import {
   X,
   FileImage,
 } from 'lucide-react';
-import { mockCategories, mockProducts } from '@/lib/data/mock-data';
 import { Category, Product, ProductVariant } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 
@@ -60,7 +59,7 @@ export default function EditProductPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   // Form Fields
   const [name, setName] = useState('');

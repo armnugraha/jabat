@@ -22,7 +22,6 @@ import { Header } from '@/components/customer/Header';
 import { BottomNav } from '@/components/customer/BottomNav';
 import { ProductCard } from '@/components/customer/ProductCard';
 import { Product, Category } from '@/lib/types';
-import { mockProducts, mockCategories } from '@/lib/data/mock-data';
 import { useCart } from '@/lib/store/cart-context';
 import { useWishlist } from '@/lib/store/wishlist-context';
 import { formatRupiah } from '@/lib/utils';
@@ -57,13 +56,13 @@ function ProductsContent() {
     fetch('/api/categories')
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
+        if (json.success && json.data) {
           setCategories(json.data);
         } else {
-          setCategories(mockCategories);
+          setCategories([]);
         }
       })
-      .catch(() => setCategories(mockCategories));
+      .catch(() => setCategories([]));
   }, []);
 
   // Sync category from URL search params
@@ -108,12 +107,12 @@ function ProductsContent() {
         if (json.success && json.data) {
           setProducts(json.data);
         } else {
-          setProducts(mockProducts);
+          setProducts([]);
         }
       })
       .catch((err) => {
         console.error('Failed to fetch products:', err);
-        setProducts(mockProducts);
+        setProducts([]);
       })
       .finally(() => {
         setIsLoading(false);

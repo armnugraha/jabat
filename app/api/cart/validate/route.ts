@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockProducts } from '@/lib/data/mock-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,8 +18,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Fetch all products with variants from Supabase (fallback to mock)
-    let allProducts = mockProducts;
+    // Fetch all products with variants from Supabase
+    let allProducts: any[] = [];
     let allBundles: any[] = [];
 
     if (isSupabaseConfigured()) {

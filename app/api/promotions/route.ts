@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockPromotions } from '@/lib/data/mock-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,8 +27,8 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data: mockPromotions,
-      source: 'local_fallback',
+      data: [],
+      source: 'database',
     });
   } catch (err: any) {
     console.error('Promotions GET error:', err);

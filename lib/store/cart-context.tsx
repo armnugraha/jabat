@@ -2,7 +2,6 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, ProductVariant, CartItem, DeliveryOption, PaymentMethod, Promotion, StoreSettings, BundlingPackage } from '../types';
-import { mockPromotions, mockStoreSettings } from '../data/mock-data';
 
 import { useAuth } from './auth-context';
 
@@ -43,12 +42,38 @@ interface CartContextType {
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
+const defaultStoreSettings: StoreSettings = {
+  id: '00000000-0000-0000-0000-000000000001',
+  store_name: 'JABAT (Jajap Obat)',
+  tagline: 'Farmasi Digital Resmi & Terpercaya',
+  branch_name: 'Rancaekek, Bandung',
+  address: 'Jl. Raya Rancaekek No. 88, Rancaekek, Bandung',
+  phone: '0812-3456-7890',
+  whatsapp: '6281234567890',
+  email: 'layanan@jabat.id',
+  pharmacist_name: '-',
+  pharmacist_sipa: '',
+  is_open: true,
+  opening_time: '08:00',
+  closing_time: '21:00',
+  express_delivery_fee: 10000,
+  regular_delivery_fee: 15000,
+  free_delivery_threshold: 100000,
+  bank_transfer_enabled: false,
+  bank_name: '',
+  bank_account_number: '',
+  bank_account_holder: '',
+  qris_enabled: false,
+  cod_enabled: true,
+  min_order_amount: 10000,
+};
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, isLoading: isAuthLoading } = useAuth();
   const [items, setItems] = useState<CartItem[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [storeSettings, setStoreSettings] = useState<StoreSettings>(mockStoreSettings);
-  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>(mockPromotions);
+  const [storeSettings, setStoreSettings] = useState<StoreSettings>(defaultStoreSettings);
+  const [availablePromotions, setAvailablePromotions] = useState<Promotion[]>([]);
   const lastLoadedUserIdRef = React.useRef<string | null>(null);
 
   // Load store settings & promotions from API

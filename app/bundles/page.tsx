@@ -22,7 +22,6 @@ import {
 import { Header } from '@/components/customer/Header';
 import { BottomNav } from '@/components/customer/BottomNav';
 import { BundlingPackage } from '@/lib/types';
-import { mockBundlingPackages } from '@/lib/data/mock-data';
 import { useCart } from '@/lib/store/cart-context';
 import { formatRupiah } from '@/lib/utils';
 

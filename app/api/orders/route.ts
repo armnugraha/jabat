@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockOrders } from '@/lib/data/mock-data';
 
 export const dynamic = 'force-dynamic';
 
@@ -255,7 +254,6 @@ export async function POST(request: Request) {
 
     // Save to in-memory store
     inMemoryOrders.unshift(formattedOrder);
-    mockOrders.unshift(formattedOrder as any);
 
     // Also attempt inserting into Supabase database
     if (isSupabaseConfigured()) {

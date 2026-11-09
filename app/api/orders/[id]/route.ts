@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockOrders, mockProducts } from '@/lib/data/mock-data';
 import { isValidUUID } from '@/lib/utils';
 
 
@@ -77,15 +76,6 @@ export async function GET(
       } catch (dbErr) {
         console.warn('Supabase fetch order by id notice:', dbErr);
       }
-    }
-
-    // Fallback: check in-memory / mock orders
-    const mockOrder = mockOrders.find((o) => o.id === id || o.order_number === id);
-    if (mockOrder) {
-      return NextResponse.json({
-        success: true,
-        data: mockOrder,
-      });
     }
 
     return NextResponse.json(
@@ -217,38 +207,6 @@ export async function PUT(
         orderUpdateQuery = orderUpdateQuery.eq('order_number', id);
       }
       await orderUpdateQuery;
-    }
-
-    // Selalu sinkronkan juga ke mockOrders dan mockProducts untuk fallback local
-    const targetMock = mockOrders.find((o) => o.id === id || o.order_number === id);
-    if (targetMock) {
-      const prevStatus = targetMock.status;
-      const wasConfirmed = prevStatus && confirmedStatuses.includes(prevStatus);
-      const isConfirmed = status && confirmedStatuses.includes(status);
-
-      if (status) targetMock.status = status;
-      if (prescriptionStatus) targetMock.prescription_status = prescriptionStatus;
-      if (updates.payment_status) targetMock.payment_status = updates.payment_status;
-
-      if (isConfirmed && !wasConfirmed) {
-        for (const item of targetMock.items || []) {
-          for (const prod of mockProducts) {
-            const v = prod.variants.find((vr) => vr.id === item.variant_id);
-            if (v) {
-              v.stock = Math.max(0, (v.stock || 0) - (Number(item.quantity) || 1));
-            }
-          }
-        }
-      } else if (status === 'cancelled' && wasConfirmed) {
-        for (const item of targetMock.items || []) {
-          for (const prod of mockProducts) {
-            const v = prod.variants.find((vr) => vr.id === item.variant_id);
-            if (v) {
-              v.stock = (v.stock || 0) + (Number(item.quantity) || 1);
-            }
-          }
-        }
-      }
     }
 
     return NextResponse.json({

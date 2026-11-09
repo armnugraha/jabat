@@ -4,7 +4,6 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Pill, Sparkles, Activity, Heart, Stethoscope, Tag, Package, ShieldPlus, Layers } from 'lucide-react';
 import { Category } from '@/lib/types';
-import { mockCategories } from '@/lib/data/mock-data';
 
 interface CategoryGridProps {
   categories?: Category[];
@@ -33,15 +32,15 @@ export const CategoryGrid: React.FC<CategoryGridProps> = ({
     fetch('/api/categories')
       .then((res) => res.json())
       .then((json) => {
-        if (json.success && json.data && json.data.length > 0) {
+        if (json.success && json.data) {
           setCategories(json.data);
         } else {
-          setCategories(mockCategories);
+          setCategories([]);
         }
       })
       .catch((err) => {
         console.error('Error fetching categories:', err);
-        setCategories(mockCategories);
+        setCategories([]);
       })
       .finally(() => {
         setIsLoading(false);

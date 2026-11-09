@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mockCategories } from '@/lib/data/mock-data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Category } from '@/lib/types';
 import { isValidUUID } from '@/lib/utils';
 
 // In-memory store fallback when Supabase is not connected
-let dynamicCategories: Category[] = [...mockCategories];
+let dynamicCategories: Category[] = [];
 
 export async function GET(request: NextRequest) {
   try {

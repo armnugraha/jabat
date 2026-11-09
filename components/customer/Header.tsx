@@ -7,7 +7,6 @@ import { ShoppingBag, ShieldCheck, MapPin, Clock, Home, Pill, FileText, MessageS
 import { useCart } from '@/lib/store/cart-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { StoreSettings } from '@/lib/types';
-import { mockStoreSettings } from '@/lib/data/mock-data';
 import { isStoreOpenNow } from '@/lib/utils';
 
 interface HeaderProps {
@@ -26,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   const pathname = usePathname();
   const { itemCount } = useCart();
   const { user, role } = useAuth();
-  const [store, setStore] = useState<StoreSettings>(mockStoreSettings);
+  const [store, setStore] = useState<StoreSettings | null>(null);
 
   useEffect(() => {
     fetch('/api/store', { cache: 'no-store' })
@@ -47,11 +46,11 @@ export const Header: React.FC<HeaderProps> = ({
     { label: 'Akun Saya', href: '/account', icon: User, isActive: pathname.startsWith('/account') },
   ];
 
-  const { isOpen, statusText } = isStoreOpenNow(store);
-  const branchName = store.branch_name || 'Rancaekek';
-  const fullAddress = store.address || 'Jl. Raya Rancaekek No. 88, Bandung';
-  const storeName = store.store_name || 'JABAT (Jajap Obat)';
-  const tagline = store.tagline || 'Farmasi Digital Resmi & Terpercaya';
+  const { isOpen, statusText } = store ? isStoreOpenNow(store) : { isOpen: true, statusText: 'Buka' };
+  const branchName = store?.branch_name || 'Rancaekek';
+  const fullAddress = store?.address || '';
+  const storeName = store?.store_name || 'JABAT (Jajap Obat)';
+  const tagline = store?.tagline || 'Farmasi Digital Resmi & Terpercaya';
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-100 transition-all">

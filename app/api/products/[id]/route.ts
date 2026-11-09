@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mockProducts } from '@/lib/data/mock-data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
@@ -39,23 +38,10 @@ export async function GET(
       }
     }
 
-    // Local fallback
-    const product = mockProducts.find(
-      (p) => p.id === id || p.slug === id
+    return NextResponse.json(
+      { success: false, error: 'Produk obat tidak ditemukan' },
+      { status: 404 }
     );
-
-    if (!product) {
-      return NextResponse.json(
-        { success: false, error: 'Produk obat tidak ditemukan' },
-        { status: 404 }
-      );
-    }
-
-    return NextResponse.json({
-      success: true,
-      data: product,
-      source: 'local_database',
-    });
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || 'Gagal mengambil detail produk' },
@@ -194,33 +180,10 @@ export async function PUT(
       });
     }
 
-    // Fallback update
-    const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
-    if (mockP) {
-      mockP.name = name.trim();
-      mockP.description = description || '';
-      mockP.category_id = category_id || mockP.category_id;
-      mockP.requires_prescription = Boolean(requires_prescription);
-      mockP.is_active = is_active !== false;
-      mockP.is_featured = Boolean(is_featured);
-      mockP.bpom_number = bpom_number || null;
-      mockP.manufacturer = manufacturer || null;
-      mockP.indications = indications || null;
-      mockP.composition = composition || null;
-      mockP.dosage = dosage || null;
-      mockP.precautions = precautions || null;
-      mockP.storage_instructions = storage_instructions || null;
-      mockP.image_url = image_url || mockP.image_url;
-      if (variants && Array.isArray(variants)) {
-        mockP.variants = variants;
-      }
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Produk berhasil diperbarui',
-      data: mockP,
-    });
+    return NextResponse.json(
+      { success: false, error: 'Produk tidak ditemukan atau database tidak terhubung' },
+      { status: 404 }
+    );
   } catch (err: any) {
     console.error('Update product error:', err);
     return NextResponse.json(
@@ -267,30 +230,17 @@ export async function PATCH(
           );
         }
 
-        // Also sync local fallback in memory
-        const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
-        if (mockP) {
-          mockP.is_active = activeBool;
-        }
-
         return NextResponse.json({
           success: true,
           message: `Produk berhasil ${activeBool ? 'diaktifkan' : 'dinonaktifkan'}`,
-          data: updatedProd || mockP,
+          data: updatedProd,
         });
       }
 
-      // Fallback local update
-      const mockP = mockProducts.find((p) => p.id === id || p.slug === id);
-      if (mockP) {
-        mockP.is_active = activeBool;
-      }
-
-      return NextResponse.json({
-        success: true,
-        message: `Produk berhasil ${activeBool ? 'diaktifkan' : 'dinonaktifkan'}`,
-        data: mockP,
-      });
+      return NextResponse.json(
+        { success: false, error: 'Database tidak terhubung' },
+        { status: 500 }
+      );
     }
 
     // 2. Handle variant stock update
@@ -344,17 +294,10 @@ export async function PATCH(
         );
       }
     } else {
-      // Mock data fallback
-      const prod = mockProducts.find((p) => p.id === id || p.slug === id);
-      const variant = prod?.variants.find((v) => v.id === variantId);
-      if (variant) {
-        if (typeof stock === 'number') {
-          variant.stock = Math.max(0, Math.round(stock));
-        } else if (typeof delta === 'number') {
-          variant.stock = Math.max(0, (variant.stock || 0) + Math.round(delta));
-        }
-        finalStock = variant.stock;
-      }
+      return NextResponse.json(
+        { success: false, error: 'Database tidak terhubung' },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
@@ -424,16 +367,10 @@ export async function DELETE(
       });
     }
 
-    // Fallback if mock
-    const idx = mockProducts.findIndex((p) => p.id === id || p.slug === id);
-    if (idx !== -1) {
-      mockProducts.splice(idx, 1);
-    }
-
-    return NextResponse.json({
-      success: true,
-      message: 'Produk berhasil dihapus',
-    });
+    return NextResponse.json(
+      { success: false, error: 'Database tidak terhubung' },
+      { status: 500 }
+    );
   } catch (err: any) {
     return NextResponse.json(
       { success: false, error: err?.message || 'Gagal menghapus produk' },

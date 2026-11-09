@@ -17,7 +17,6 @@ import {
   ShieldCheck,
   Loader2,
 } from 'lucide-react';
-import { mockStoreSettings } from '@/lib/data/mock-data';
 import { formatRupiah, getOrderStatusBadge, getPaymentStatusBadge } from '@/lib/utils';
 import { Order, OrderStatus } from '@/lib/types';
 import { useAuth } from '@/lib/store/auth-context';

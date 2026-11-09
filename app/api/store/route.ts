@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { supabaseAnon, getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockStoreSettings } from '@/lib/data/mock-data';
 import { StoreSettings } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -110,21 +109,40 @@ export async function GET() {
       }
     }
 
+    const defaultStoreSettings: StoreSettings = {
+      id: '00000000-0000-0000-0000-000000000001',
+      store_name: process.env.NEXT_PUBLIC_STORE_NAME || 'JABAT (Jajap Obat)',
+      tagline: 'Farmasi Digital Resmi & Terpercaya',
+      branch_name: process.env.NEXT_PUBLIC_STORE_BRANCH || 'Rancaekek, Bandung',
+      address: 'Jl. Raya Rancaekek No. 88, Rancaekek, Bandung',
+      phone: process.env.NEXT_PUBLIC_STORE_PHONE || '0812-3456-7890',
+      whatsapp: '6281234567890',
+      email: 'layanan@jabat.id',
+      pharmacist_name: '-',
+      pharmacist_sipa: '',
+      is_open: true,
+      opening_time: '08:00',
+      closing_time: '21:00',
+      express_delivery_fee: 10000,
+      regular_delivery_fee: 15000,
+      free_delivery_threshold: 100000,
+      bank_transfer_enabled: false,
+      bank_name: '',
+      bank_account_number: '',
+      bank_account_holder: '',
+      qris_enabled: false,
+      cod_enabled: true,
+      min_order_amount: 10000,
+    };
+
     return NextResponse.json(
       {
         success: true,
         data: {
-          ...formatStoreSettings(mockStoreSettings),
-          available_pharmacists: [
-            {
-              id: 'ef729fc0-54a1-4091-b083-51d1d0ce44b2',
-              full_name: mockStoreSettings.pharmacist_name,
-              sipa_number: mockStoreSettings.pharmacist_sipa,
-              role: 'pharmacist',
-            },
-          ],
+          ...formatStoreSettings(defaultStoreSettings),
+          available_pharmacists: [],
         },
-        source: 'fallback',
+        source: 'default',
       },
       { headers: noCacheHeaders }
     );

@@ -31,14 +31,42 @@ import {
   Baby,
   Brain,
   AlertCircle,
+  Package,
 } from 'lucide-react';
-import { mockProducts, mockStoreSettings, mockBundlingPackages } from '@/lib/data/mock-data';
+import { Header } from '@/components/customer/Header';
+import { BottomNav } from '@/components/customer/BottomNav';
 import { Product, ProductVariant, StoreSettings, BundlingPackage } from '@/lib/types';
 import { useCart } from '@/lib/store/cart-context';
 import { useWishlist } from '@/lib/store/wishlist-context';
 import { useAuth } from '@/lib/store/auth-context';
 import { formatRupiah, parsePharmacistLicense } from '@/lib/utils';
 import { ProductVariantSelector } from '@/components/customer/ProductVariantSelector';
+
+const defaultStoreSettings: StoreSettings = {
+  id: '00000000-0000-0000-0000-000000000001',
+  store_name: 'JABAT (Jajap Obat)',
+  tagline: 'Farmasi Digital Resmi & Terpercaya',
+  branch_name: 'Rancaekek, Bandung',
+  address: 'Jl. Raya Rancaekek No. 88, Rancaekek, Bandung',
+  phone: '0812-3456-7890',
+  whatsapp: '6281234567890',
+  email: 'layanan@jabat.id',
+  pharmacist_name: '-',
+  pharmacist_sipa: '',
+  is_open: true,
+  opening_time: '08:00',
+  closing_time: '21:00',
+  express_delivery_fee: 10000,
+  regular_delivery_fee: 15000,
+  free_delivery_threshold: 100000,
+  bank_transfer_enabled: false,
+  bank_name: '',
+  bank_account_number: '',
+  bank_account_holder: '',
+  qris_enabled: false,
+  cod_enabled: true,
+  min_order_amount: 10000,
+};
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -56,7 +84,7 @@ export default function ProductDetailPage() {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('Produk berhasil masuk keranjang!');
   const [isLoading, setIsLoading] = useState(true);
-  const [store, setStore] = useState<StoreSettings>(mockStoreSettings);
+  const [store, setStore] = useState<StoreSettings>(defaultStoreSettings);
 
   // Photo Slider & Lightbox State
   const [allProducts, setAllProducts] = useState<Product[]>([]);
@@ -102,17 +130,14 @@ export default function ProductDetailPage() {
           setProduct(json.data);
           setSelectedVariant(json.data.variants?.[0] || null);
         } else {
-          // Fallback to mock product
-          const fallback = mockProducts.find((p) => p.id === id || p.slug === id) || mockProducts[0];
-          setProduct(fallback);
-          setSelectedVariant(fallback.variants[0]);
+          setProduct(null);
+          setSelectedVariant(null);
         }
       })
       .catch((err) => {
         console.error('Error loading product from API:', err);
-        const fallback = mockProducts.find((p) => p.id === id || p.slug === id) || mockProducts[0];
-        setProduct(fallback);
-        setSelectedVariant(fallback.variants[0]);
+        setProduct(null);
+        setSelectedVariant(null);
       })
       .finally(() => {
         setIsLoading(false);
@@ -154,7 +179,7 @@ export default function ProductDetailPage() {
   // Dynamic Complementary / Frequently Bought Together Algorithm (Hook - must be before any return)
   const frequentlyBoughtTogether = React.useMemo(() => {
     if (!product) return [];
-    const sourceList = allProducts.length > 0 ? allProducts : mockProducts;
+    const sourceList = allProducts;
     const candidates = sourceList.filter((p) => p.id !== product.id && p.slug !== product.slug);
 
     const scored = candidates.map((p) => {
@@ -186,11 +211,35 @@ export default function ProductDetailPage() {
     }
   }, [frequentlyBoughtTogether]);
 
-  if (isLoading || !product || !selectedVariant) {
+  if (isLoading) {
     return (
       <div className="flex flex-col min-h-screen bg-slate-50 items-center justify-center p-4">
         <Loader2 className="w-8 h-8 animate-spin text-sky-600 mb-2" />
         <span className="text-xs text-slate-500 font-medium">Memuat informasi obat resmi...</span>
+      </div>
+    );
+  }
+
+  if (!product || !selectedVariant) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col">
+        <Header showBack title="Produk Tidak Ditemukan" />
+        <main className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 mb-4">
+            <Package className="w-8 h-8" />
+          </div>
+          <h2 className="text-base font-bold text-slate-800">Produk Tidak Ditemukan</h2>
+          <p className="text-xs text-slate-500 mt-1 max-w-xs">
+            Obat atau produk yang Anda cari mungkin sudah tidak tersedia atau link tidak valid.
+          </p>
+          <Link
+            href="/products"
+            className="mt-6 px-5 py-2.5 bg-sky-600 text-white rounded-xl text-xs font-semibold hover:bg-sky-700 transition"
+          >
+            Kembali ke Katalog
+          </Link>
+        </main>
+        <BottomNav />
       </div>
     );
   }
@@ -649,11 +698,11 @@ export default function ProductDetailPage() {
                     Apoteker PJ
                   </div>
                   <div className="text-xs font-bold text-slate-900 mt-0.5 line-clamp-1">
-                    {store.pharmacist_name || mockStoreSettings.pharmacist_name}
+                    {store?.pharmacist_name || 'Apoteker Penanggung Jawab'}
                   </div>
                   <div className="text-[9px] text-slate-500 mt-1 font-mono truncate">
                     {(() => {
-                      const lic = parsePharmacistLicense(store.pharmacist_sipa);
+                      const lic = parsePharmacistLicense(store?.pharmacist_sipa);
                       return lic.hasLicense ? lic.displayText : 'SIPA: -';
                     })()}
                   </div>

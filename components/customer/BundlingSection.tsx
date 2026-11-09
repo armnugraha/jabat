@@ -18,7 +18,6 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { BundlingPackage } from '@/lib/types';
-import { mockBundlingPackages } from '@/lib/data/mock-data';
 import { useCart } from '@/lib/store/cart-context';
 import { formatRupiah } from '@/lib/utils';
 

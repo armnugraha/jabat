@@ -16,31 +16,36 @@ import { CategoryGrid } from '@/components/customer/CategoryGrid';
 import { ProductCard } from '@/components/customer/ProductCard';
 import { BundlingSection } from '@/components/customer/BundlingSection';
 import { Product, Category } from '@/lib/types';
-import { mockProducts, mockCategories } from '@/lib/data/mock-data';
 
 export default function HomePage() {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>(mockProducts);
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Fetch products & categories concurrently from API endpoints
     Promise.all([
-      fetch('/api/products?featured=true').then((res) => res.json()),
+      fetch('/api/products').then((res) => res.json()),
       fetch('/api/categories').then((res) => res.json()),
     ])
       .then(([prodJson, catJson]) => {
         if (prodJson.success && prodJson.data) {
           setProducts(prodJson.data);
+        } else {
+          setProducts([]);
         }
         if (catJson.success && catJson.data) {
           setCategories(catJson.data);
+        } else {
+          setCategories([]);
         }
       })
       .catch((err) => {
         console.error('Failed fetching data from API:', err);
+        setProducts([]);
+        setCategories([]);
       })
       .finally(() => {
         setIsLoading(false);
@@ -128,6 +133,10 @@ export default function HomePage() {
             <div className="py-16 flex flex-col items-center justify-center gap-2 text-slate-400">
               <Loader2 className="w-7 h-7 animate-spin text-sky-600" />
               <span className="text-xs md:text-sm">Memuat produk apotek...</span>
+            </div>
+          ) : products.length === 0 ? (
+            <div className="py-12 text-center text-slate-400 text-xs md:text-sm">
+              Belum ada produk obat yang tersedia di katalog saat ini.
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 gap-3.5 md:gap-4 mt-3">

@@ -30,7 +30,6 @@ import {
   Package,
 } from 'lucide-react';
 import { BundlingPackage, BundlingItem, Product, ProductVariant } from '@/lib/types';
-import { mockBundlingPackages, mockProducts } from '@/lib/data/mock-data';
 import { formatRupiah } from '@/lib/utils';
 
 // Standard preset categories
@@ -45,7 +44,7 @@ const PRESET_CATEGORIES = [
 
 export default function AdminBundlingPage() {
   const [bundles, setBundles] = useState<BundlingPackage[]>([]);
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');

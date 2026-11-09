@@ -20,12 +20,11 @@ import {
   Check,
   AlertCircle,
 } from 'lucide-react';
-import { mockProducts } from '@/lib/data/mock-data';
 import { formatRupiah } from '@/lib/utils';
 import { Product, ProductVariant } from '@/lib/types';
 
 export default function AdminProductsPage() {
-  const [products, setProducts] = useState<Product[]>(mockProducts);
+  const [products, setProducts] = useState<Product[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'active' | 'inactive'>('all');

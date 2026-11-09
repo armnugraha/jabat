@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { mockProducts, mockCategories } from '@/lib/data/mock-data';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
 import { Product } from '@/lib/types';
 import { isValidUUID } from '@/lib/utils';
 
 // In-memory store fallback when Supabase is not connected
-let dynamicProducts: Product[] = [...mockProducts];
+let dynamicProducts: Product[] = [];
 
 
 export async function GET(request: NextRequest) {
@@ -58,7 +57,7 @@ export async function GET(request: NextRequest) {
 
       const { data, error } = await queryBuilder;
 
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         let filtered: Product[] = data;
 
         // Apply category filter if slug provided
@@ -144,14 +143,6 @@ export async function GET(request: NextRequest) {
     }
 
     // Local / In-memory fallback
-    // Sync dynamicProducts with mockProducts
-    for (const mp of mockProducts) {
-      const idx = dynamicProducts.findIndex((dp) => dp.id === mp.id);
-      if (idx !== -1) {
-        dynamicProducts[idx].is_active = mp.is_active;
-      }
-    }
-
     let result = dynamicProducts.filter((p) => {
       let matchActive = true;
       if (!showAll) {

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { isSupabaseConfigured } from '@/lib/supabase/client';
 import { getSupabaseAdminClient } from '@/lib/supabase/server';
-import { mockBundlingPackages, mockProducts } from '@/lib/data/mock-data';
 import { BundlingPackage, BundlingItem } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -42,12 +41,12 @@ function computeBundlePricing(bundle: BundlingPackage, items: BundlingItem[]): B
 }
 
 // Helper to populate items with full product & variant information
-function populateBundleDetails(bundle: BundlingPackage, allProducts = mockProducts): BundlingPackage {
+function populateBundleDetails(bundle: BundlingPackage, allProducts: any[] = []): BundlingPackage {
   const populatedItems: BundlingItem[] = (bundle.items || []).map((item) => {
     const product = item.product || allProducts.find((p) => p.id === item.product_id);
     const variant =
       item.variant ||
-      product?.variants?.find((v) => v.id === item.variant_id) ||
+      product?.variants?.find((v: any) => v.id === item.variant_id) ||
       product?.variants?.[0];
     return {
       ...item,
@@ -100,7 +99,7 @@ export async function GET(request: NextRequest) {
 
           // Fetch products for population
           const { data: dbProducts } = await supabase.from('products').select('*, variants:product_variants(*)');
-          const productsList = dbProducts || mockProducts;
+          const productsList = dbProducts || [];
 
           let packagesWithItems: BundlingPackage[] = dbPackages.map((pkg) => {
             const items = (dbItems || [])
@@ -203,8 +202,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch products from database or mock
-    let productsList = mockProducts;
+    // Fetch products from database
+    let productsList: any[] = [];
     if (isSupabaseConfigured()) {
       try {
         const supabase = await getSupabaseAdminClient();
@@ -218,7 +217,7 @@ export async function POST(request: NextRequest) {
     // Calculate original price from items
     let calculatedOriginal = 0;
     const formattedItems: BundlingItem[] = items.map((it: any, idx: number) => {
-      const prod = productsList.find((p: any) => p.id === it.product_id) || mockProducts.find((p) => p.id === it.product_id);
+      const prod = productsList.find((p: any) => p.id === it.product_id);
       const vari = prod?.variants?.find((v: any) => v.id === it.variant_id) || prod?.variants?.[0];
       const itemPrice = Number(it.price) || vari?.price || 0;
       const quantity = Math.max(1, Number(it.quantity) || 1);
@@ -360,8 +359,8 @@ export async function PUT(request: NextRequest) {
       } catch (e) {}
     }
 
-    // Fetch products from database or mock
-    let productsList = mockProducts;
+    // Fetch products from database
+    let productsList: any[] = [];
     if (isSupabaseConfigured()) {
       try {
         const supabase = await getSupabaseAdminClient();
@@ -375,7 +374,7 @@ export async function PUT(request: NextRequest) {
     // Calculate price
     let calculatedOriginal = 0;
     const formattedItems: BundlingItem[] = (items || existing?.items || []).map((it: any, idx: number) => {
-      const prod = productsList.find((p: any) => p.id === it.product_id) || mockProducts.find((p) => p.id === it.product_id);
+      const prod = productsList.find((p: any) => p.id === it.product_id);
       const vari = prod?.variants?.find((v: any) => v.id === it.variant_id) || prod?.variants?.[0];
       const itemPrice = Number(it.price) || vari?.price || 0;
       const quantity = Math.max(1, Number(it.quantity) || 1);

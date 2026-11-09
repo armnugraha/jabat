@@ -18,7 +18,6 @@ import {
   X,
   FileImage,
 } from 'lucide-react';
-import { mockCategories } from '@/lib/data/mock-data';
 import { Category, ProductVariant } from '@/lib/types';
 import { formatRupiah } from '@/lib/utils';
 
@@ -52,14 +51,14 @@ export default function NewProductPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Categories state
-  const [categories, setCategories] = useState<Category[]>(mockCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Basic Info
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [categoryId, setCategoryId] = useState('c1');
+  const [categoryId, setCategoryId] = useState('');
   const [bpomNumber, setBpomNumber] = useState('');
   const [manufacturer, setManufacturer] = useState('');
   const [imageUrl, setImageUrl] = useState(
