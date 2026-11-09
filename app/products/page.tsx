@@ -441,7 +441,7 @@ function ProductsContent() {
               <div className="grid grid-cols-3 gap-2">
                 {[
                   { id: 'all', label: 'Semua' },
-                  { id: 'false', label: 'Obat Bebas' },
+                  { id: 'false', label: 'Bebas / Non-Resep' },
                   { id: 'true', label: 'Wajib Resep' },
                 ].map((item) => (
                   <button

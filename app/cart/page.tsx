@@ -640,7 +640,7 @@ export default function CartPage() {
                                       : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                                   }`}
                                 >
-                                  • {isPrescription ? 'Wajib Resep' : 'Obat Bebas'}
+                                  • {isPrescription ? 'Wajib Resep' : (item.product.category?.name || 'Obat Bebas')}
                                 </span>
                                 <span className="text-[10px] text-slate-400 font-medium truncate">
                                   • {item.product.manufacturer || 'Kimia Farma'}

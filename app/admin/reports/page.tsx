@@ -1090,7 +1090,7 @@ export default function AdminReportsPage() {
                       <div>
                         <h4 className="font-bold text-slate-900">{p.name}</h4>
                         <p className="text-[10px] text-slate-500">
-                          {p.requires_prescription ? 'Wajib Resep Dokter' : 'Obat Bebas'} • {p.manufacturer || 'Kimia Farma'}
+                          {p.requires_prescription ? 'Wajib Resep Dokter' : (p.category?.name || 'Obat Bebas')} • {p.manufacturer || 'Kimia Farma'}
                         </p>
                       </div>
                     </div>

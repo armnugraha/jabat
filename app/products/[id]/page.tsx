@@ -413,20 +413,44 @@ export default function ProductDetailPage() {
               {/* Top Badges */}
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span
-                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                      product.requires_prescription
-                        ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    }`}
-                  >
-                    <span
-                      className={`w-1.5 h-1.5 rounded-full ${
-                        product.requires_prescription ? 'bg-rose-500' : 'bg-emerald-500'
-                      }`}
-                    />
-                    {product.requires_prescription ? 'Wajib Resep' : 'Obat Bebas'}
-                  </span>
+                  {(() => {
+                    if (product.requires_prescription) {
+                      return (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                          Wajib Resep
+                        </span>
+                      );
+                    }
+                    const categoryName = product.category?.name || 'Obat Bebas';
+                    const catLower = categoryName.toLowerCase();
+                    let colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+                    let dotClass = 'bg-emerald-500';
+
+                    if (catLower.includes('vitamin') || catLower.includes('suplemen')) {
+                      colorClass = 'bg-blue-50 text-blue-700 border-blue-200';
+                      dotClass = 'bg-blue-500';
+                    } else if (catLower.includes('alat') || catLower.includes('alkes')) {
+                      colorClass = 'bg-indigo-50 text-indigo-700 border-indigo-200';
+                      dotClass = 'bg-indigo-500';
+                    } else if (catLower.includes('herbal') || catLower.includes('tradisional') || catLower.includes('jamu')) {
+                      colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+                      dotClass = 'bg-amber-500';
+                    } else if (catLower.includes('anak') || catLower.includes('bayi') || catLower.includes('ibu')) {
+                      colorClass = 'bg-purple-50 text-purple-700 border-purple-200';
+                      dotClass = 'bg-purple-500';
+                    } else if (catLower.includes('perawatan') || catLower.includes('kulit')) {
+                      colorClass = 'bg-teal-50 text-teal-700 border-teal-200';
+                      dotClass = 'bg-teal-500';
+                    }
+
+                    return (
+                      <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${colorClass}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${dotClass}`} />
+                        {categoryName}
+                      </span>
+                    );
+                  })()}
                   {Boolean(selectedVariant.discount_percentage && selectedVariant.discount_percentage > 0) && (
                     <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-600 border border-orange-200">
                       Diskon -{selectedVariant.discount_percentage}%

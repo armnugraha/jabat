@@ -495,7 +495,7 @@ export default function ChatPage() {
                               <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold">
                                 {msg.recommended_product.requires_prescription
                                   ? '• Obat Keras / Resep'
-                                  : '• Obat Bebas'}
+                                  : `• ${msg.recommended_product.category?.name || 'Obat Bebas'}`}
                               </span>
                             </div>
 

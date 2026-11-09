@@ -82,22 +82,48 @@ export const ProductCard: React.FC<ProductCardProps> = ({
         wrapperClass: 'bg-rose-50 text-rose-700 border-rose-200/80',
       };
     }
-    if (product.category_id === 'c3' || product.category?.slug === 'vitamin-suplemen') {
+
+    const categoryName = product.category?.name || 'Obat Bebas';
+    const catLower = categoryName.toLowerCase();
+
+    if (catLower.includes('vitamin') || catLower.includes('suplemen')) {
       return {
-        label: 'Suplemen',
+        label: categoryName,
         dotClass: 'bg-blue-500',
         wrapperClass: 'bg-blue-50 text-blue-700 border-blue-200/80',
       };
     }
-    if (product.category_id === 'c5' || product.category?.slug === 'alat-kesehatan') {
+    if (catLower.includes('alat') || catLower.includes('alkes')) {
       return {
-        label: 'Alkes',
+        label: categoryName,
         dotClass: 'bg-indigo-500',
         wrapperClass: 'bg-indigo-50 text-indigo-700 border-indigo-200/80',
       };
     }
+    if (catLower.includes('herbal') || catLower.includes('tradisional') || catLower.includes('jamu')) {
+      return {
+        label: categoryName,
+        dotClass: 'bg-amber-500',
+        wrapperClass: 'bg-amber-50 text-amber-700 border-amber-200/80',
+      };
+    }
+    if (catLower.includes('anak') || catLower.includes('bayi') || catLower.includes('ibu')) {
+      return {
+        label: categoryName,
+        dotClass: 'bg-purple-500',
+        wrapperClass: 'bg-purple-50 text-purple-700 border-purple-200/80',
+      };
+    }
+    if (catLower.includes('perawatan') || catLower.includes('kulit')) {
+      return {
+        label: categoryName,
+        dotClass: 'bg-teal-500',
+        wrapperClass: 'bg-teal-50 text-teal-700 border-teal-200/80',
+      };
+    }
+
     return {
-      label: 'Obat Bebas',
+      label: categoryName,
       dotClass: 'bg-emerald-500',
       wrapperClass: 'bg-emerald-50 text-emerald-700 border-emerald-200/80',
     };

@@ -21,10 +21,11 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { formatRupiah } from '@/lib/utils';
-import { Product, ProductVariant } from '@/lib/types';
+import { Product, ProductVariant, Category } from '@/lib/types';
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'active' | 'inactive'>('all');
@@ -39,23 +40,47 @@ export default function AdminProductsPage() {
   const [isSavingStock, setIsSavingStock] = useState<boolean>(false);
   const [stockSuccessMessage, setStockSuccessMessage] = useState<string | null>(null);
 
-  // Fetch products from API (load all including inactive for admin management)
+  // Fetch products & categories from API (load all including inactive for admin management)
   const loadProducts = () => {
     setIsLoading(true);
-    fetch('/api/products?all=true')
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.success && json.data) {
-          setProducts(json.data);
+    Promise.all([
+      fetch('/api/products?all=true').then((res) => res.json()),
+      fetch('/api/categories').then((res) => res.json()),
+    ])
+      .then(([prodJson, catJson]) => {
+        if (prodJson.success && prodJson.data) {
+          setProducts(prodJson.data);
+        } else {
+          setProducts([]);
+        }
+        if (catJson.success && catJson.data) {
+          setCategories(catJson.data);
+        } else {
+          setCategories([]);
         }
       })
-      .catch((err) => console.error('Failed fetching admin products:', err))
+      .catch((err) => {
+        console.error('Failed fetching admin products & categories:', err);
+        setProducts([]);
+      })
       .finally(() => setIsLoading(false));
   };
 
   useEffect(() => {
     loadProducts();
   }, []);
+
+  const categoryMap = React.useMemo(() => {
+    const map: Record<string, string> = {};
+    categories.forEach((c) => {
+      map[c.id] = c.name;
+    });
+    return map;
+  }, [categories]);
+
+  const getProductCategoryName = (p: Product) => {
+    return p.category?.name || (p.category_id ? categoryMap[p.category_id] : '') || 'Obat Bebas';
+  };
 
   const filteredProducts = products.filter((p) => {
     const matchQuery =
@@ -270,11 +295,11 @@ export default function AdminProductsPage() {
             className="w-full sm:w-auto bg-slate-50 border border-slate-200 rounded-2xl py-2.5 px-3 text-xs font-semibold text-slate-700 focus:outline-none"
           >
             <option value="all">Semua Kategori</option>
-            <option value="c1">Obat Bebas</option>
-            <option value="c2">Perawatan Diri</option>
-            <option value="c3">Vitamin & Suplemen</option>
-            <option value="c4">Ibu & Anak</option>
-            <option value="c5">Alat Kesehatan</option>
+            {categories.map((cat) => (
+              <option key={cat.id} value={cat.id}>
+                {cat.name}
+              </option>
+            ))}
           </select>
 
           <select
@@ -301,7 +326,7 @@ export default function AdminProductsPage() {
             <thead className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
               <tr>
                 <th className="py-3.5 px-4">Nama Produk & BPOM</th>
-                <th className="py-3.5 px-4">Tipe Obat</th>
+                <th className="py-3.5 px-4">Kategori / Regulasi</th>
                 <th className="py-3.5 px-4 min-w-[280px]">Varian Kemasan & Kontrol Stok</th>
                 <th className="py-3.5 px-4 text-center">Status</th>
                 <th className="py-3.5 px-4 text-right">Aksi</th>
@@ -337,7 +362,7 @@ export default function AdminProductsPage() {
                     ) : (
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        Obat Bebas
+                        {getProductCategoryName(p)}
                       </span>
                     )}
                   </td>
@@ -505,7 +530,7 @@ export default function AdminProductsPage() {
                       </span>
                     ) : (
                       <span className="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">
-                        Obat Bebas
+                        {getProductCategoryName(p)}
                       </span>
                     )}
                   </div>
